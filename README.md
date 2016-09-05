@@ -1,6 +1,8 @@
 # Paddle
 
-**TODO: Add description**
+An Ecto Adapter for LDAP
+
+**Currently work in progress:** you should not use this for now.
 
 ## Installation
 
@@ -21,4 +23,3 @@ If [available in Hex](https://hex.pm/docs/publish), the package can be installed
       [applications: [:paddle]]
     end
     ```
-
