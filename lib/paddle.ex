@@ -1,0 +1,2 @@
+defmodule Paddle do
+end
