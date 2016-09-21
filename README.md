@@ -1,6 +1,6 @@
 # Paddle
 
-An Ecto Adapter for LDAP
+An library simplifying LDAP usage in Elixir projects.
 
 **Currently work in progress:** you should not use this for now.
 
