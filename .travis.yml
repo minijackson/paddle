@@ -4,8 +4,6 @@ elixir:
 otp_release:
   - 19.0
 sudo: false
-services:
-  - postgresql
 addons:
   apt:
     packages:
