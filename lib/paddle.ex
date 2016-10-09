@@ -2,8 +2,7 @@ defmodule Paddle do
   @moduledoc ~S"""
   Module handling ldap requests and translate them to the `:eldap` syntax.
 
-  Configuration
-  -------------
+  ## Configuration
 
   The configuration should be in the dev.secret.exs or prod.secret.exs depending
   on the environment you're working on. Here's an example config:
@@ -15,12 +14,15 @@ defmodule Paddle do
         ssl: true,
         port: 636
 
-  The `:host` key is mandatory. By default, it establish a non SSL
-  connection with 389 as port. The default `:base` is nothing, and the default
-  `:where`, corresponding to the `ou` key in a LDAP structure, is `"People"`.
+  - `:host` - The host of the LDAP server. Mandatory
+  - `:base` - The base DN.
+  - `:where` - Value of the `ou` DN key where the users are located. Defaults
+    to `People`.
+  - `:ssl` - When set to `true`, use SSL to connect to the LDAP server.
+    Defaults to `false`.
+  - `:port` - The port the LDAP server listen to. Defaults to `389`.
 
-  Usage
-  -----
+  ## Usage
 
   To check a user's credentials, simply do:
 
@@ -34,7 +36,11 @@ defmodule Paddle do
   alias Paddle.Parsing
 
   @type ldap_conn :: :eldap.handle
+  @type ldap_entry :: %{required(binary) => binary}
   @type auth_status :: :ok | {:error, atom}
+
+  @type eldap_dn :: charlist
+  @type eldap_entry :: {:eldap_entry, eldap_dn, [{charlist, [charlist]}]}
 
   unless Application.get_env(:paddle, Paddle) do
     raise """
@@ -42,21 +48,6 @@ defmodule Paddle do
     See the `Paddle` module documentation.
     """
   end
-
-  @settings Application.get_env :paddle, Paddle
-
-  unless Dict.get(@settings, :host) do
-    raise "Please configure a :host in the Paddle configuration"
-  end
-
-  @host Dict.get(@settings, :host) |> :erlang.binary_to_list
-  @ssl  Dict.get(@settings, :ssl, false)
-  @port Dict.get(@settings, :port, 389)
-
-  @base  Dict.get(@settings, :base, "")        |> :erlang.binary_to_list
-  @where Dict.get(@settings, :where, "People") |> :erlang.binary_to_list
-
-  @subbase 'ou=' ++ @where ++ ',' ++ @base
 
   @spec start_link() :: Genserver.on_start
 
@@ -80,12 +71,15 @@ defmodule Paddle do
   pass it we we need it.
   """
   def init(:ok) do
+    ssl  = config(:ssl)
+    host = config(:host)
+    port = config(:port)
 
-    if @ssl, do: Application.ensure_all_started(:ssl)
+    if ssl, do: Application.ensure_all_started(:ssl)
 
-    Logger.info("Connecting to ldap#{if @ssl, do: "s"}://#{@host}:#{@port}")
+    Logger.info("Connecting to ldap#{if ssl, do: "s"}://#{host}:#{port}")
 
-    {:ok, ldap_conn} = :eldap.open([@host], ssl: @ssl, port: @port)
+    {:ok, ldap_conn} = :eldap.open([host], ssl: ssl, port: port)
     Logger.info("Connected to LDAP")
     {:ok, ldap_conn}
   end
@@ -105,7 +99,7 @@ defmodule Paddle do
   end
 
   def handle_call({:authenticate, username, password}, _from, ldap_conn) do
-    dn = Parsing.construct_dn([uid: username, ou: @where], @base)
+    dn = Parsing.construct_dn([uid: username, ou: config(:where)], config(:base))
     Logger.debug "Checking credentials with dn: #{dn}"
     status = :eldap.simple_bind(ldap_conn, dn, password)
 
@@ -118,23 +112,24 @@ defmodule Paddle do
   end
 
   def handle_call({:get, kwdn}, _from, ldap_conn) do
-    dn = Parsing.construct_dn(kwdn, @base)
+    dn = Parsing.construct_dn(kwdn, config(:base))
     Logger.debug("Getting entries with dn: #{dn}")
     {:reply,
      :eldap.search(ldap_conn, base: dn, filter: :eldap.present('objectClass'))
-     |> clean_eldap_search_result,
+     |> clean_eldap_search_results,
      ldap_conn}
   end
 
   def handle_call({:get_single, kwdn}, _from, ldap_conn) do
-    dn = Parsing.construct_dn(kwdn, @base)
+    dn = Parsing.construct_dn(kwdn, config(:base))
     Logger.debug("Getting single entry with dn: #{dn}")
     {:reply,
      :eldap.search(ldap_conn,
                    base: dn,
                    scope: :eldap.baseObject,
                    filter: :eldap.present('objectClass'))
-      |> clean_eldap_search_result,
+      |> clean_eldap_search_results
+      |> ensure_single_result,
      ldap_conn}
   end
 
@@ -145,6 +140,13 @@ defmodule Paddle do
 
   Because we are using an Erlang library, we must convert the username and
   password to a list of chars instead of an Elixir string.
+
+  Example:
+
+      iex> Paddle.check_credentials("testuser", "test")
+      :ok
+      iex> Paddle.check_credentials("testuser", "wrong password")
+      {:error, :invalid_credentials}
   """
   def check_credentials(username, password) when is_list(username) and is_list(password) do
     GenServer.call(Paddle, {:authenticate, username, password})
@@ -153,6 +155,8 @@ defmodule Paddle do
   def check_credentials(username, password) do
     check_credentials(:erlang.binary_to_list(username), :erlang.binary_to_list(password))
   end
+
+  @spec get(keyword) :: {:ok, [ldap_entry]} | {:error, :no_such_object}
 
   @doc ~S"""
   Get one or more LDAP entries given a keyword list.
@@ -169,8 +173,13 @@ defmodule Paddle do
          "objectClass" => ["account", "posixAccount", "top"],
          "uid" => ["testuser"], "uidNumber" => ["500"],
          "userPassword" => ["{SSHA}AIzygLSXlArhAMzddUriXQxf7UlkqopP"]}]}
+
+      iex> Paddle.get(uid: "nothing")
+      {:error, :no_such_object}
   """
   def get(kwdn), do: GenServer.call(Paddle, {:get, kwdn})
+
+  @spec get_single(keyword) :: {:ok, ldap_entry} | {:error, :no_such_object}
 
   @doc ~S"""
   Get a single LDAP entry given a keyword list.
@@ -179,8 +188,11 @@ defmodule Paddle do
 
       iex> Paddle.get_single(ou: "People")
       {:ok,
-       [%{"dn" => "ou=People,dc=test,dc=com",
-         "objectClass" => ["organizationalUnit"], "ou" => ["People"]}]}
+       %{"dn" => "ou=People,dc=test,dc=com",
+        "objectClass" => ["organizationalUnit"], "ou" => ["People"]}}
+
+      iex> Paddle.get_single(uid: "nothing")
+      {:error, :no_such_object}
   """
   def get_single(kwdn), do: GenServer.call(Paddle, {:get_single, kwdn})
 
@@ -188,14 +200,46 @@ defmodule Paddle do
   # == Private Utilities ==
   # =======================
 
-  defp clean_eldap_search_result({:error, error} = error_tuple) do
+  @spec config :: keyword
+
+  defp config, do: Application.get_env(:paddle, Paddle)
+
+  @spec config(atom) :: any
+
+  defp config(:host),    do: Keyword.get(config, :host) |> :erlang.binary_to_list
+  defp config(:ssl),     do: config(:ssl, false)
+  defp config(:port),    do: config(:port, 389)
+  defp config(:base),    do: config(:base, "")          |> :erlang.binary_to_list
+  defp config(:where),   do: config(:where, "People")   |> :erlang.binary_to_list
+  defp config(:subbase), do: 'ou=' ++ config(:where) ++ ',' ++ config(:base)
+
+  @spec config(atom, any) :: any
+
+  defp config(key, default), do: Keyword.get(config, key, default)
+
+  @spec clean_eldap_search_results({:ok, {:eldap_search_result, [eldap_entry]}}
+                                   | {:error, atom})
+  :: {:ok, [ldap_entry]} | {:error, :no_such_object}
+
+  defp clean_eldap_search_results({:error, error}) do
     case error do
-      :noSuchObject -> error_tuple
+      :noSuchObject -> {:error, :no_such_object}
     end
   end
 
-  defp clean_eldap_search_result({:ok, {:eldap_search_result, entries, []}}) do
+  defp clean_eldap_search_results({:ok, {:eldap_search_result, entries, []}}) do
     {:ok, Parsing.clean_entries(entries)}
   end
+
+  @spec ensure_single_result({:ok, [ldap_entry]} | {:error, :no_such_object})
+  :: {:ok, ldap_entry} | {:error, :no_such_object}
+
+  defp ensure_single_result({:error, error}) do
+    case error do
+      :no_such_object -> {:error, :no_such_object}
+    end
+  end
+
+  defp ensure_single_result({:ok, [result]}), do: {:ok, result}
 
 end

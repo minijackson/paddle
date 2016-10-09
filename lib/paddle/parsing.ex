@@ -3,16 +3,18 @@ defmodule Paddle.Parsing do
   Module used to parse dn and other LDAP related stuffs.
   """
 
+  @spec construct_dn(keyword | [{binary, binary}], binary | charlist) :: charlist
+
   @doc ~S"""
   Construct a DN Erlang string based on a keyword list.
 
-  Use it like this:
+  Examples:
 
-      construct_dn(uid: "user", ou: "People")
+      iex> Paddle.Parsing.construct_dn(uid: "user", ou: "People")
+      'uid=user,ou=People'
 
-  Or:
-
-      construct_dn([{"uid", "user"}, {"ou", "People"}], "dc=organisation,dc=org")
+      iex> Paddle.Parsing.construct_dn([{"uid", "user"}, {"ou", "People"}], "dc=organisation,dc=org")
+      'uid=user,ou=People,dc=organisation,dc=org'
 
   Values are escaped.
 
@@ -40,6 +42,11 @@ defmodule Paddle.Parsing do
   Well, not exactly a keyword list but a list like this:
 
       [{"uid", "user"}, {"ou", "People"}, {"dc", "organisation"}, {"dc", "org"}]
+
+  Example:
+
+      iex> Paddle.Parsing.dn_to_kwlist("uid=user,ou=People,dc=organisation,dc=org")
+      [{"uid", "user"}, {"ou", "People"}, {"dc", "organisation"}, {"dc", "org"}]
   """
   def dn_to_kwlist(""), do: []
   def dn_to_kwlist(nil), do: []
@@ -56,6 +63,11 @@ defmodule Paddle.Parsing do
 
   @doc ~S"""
   Escape special LDAP characters in a string.
+
+  Example:
+
+      iex> Paddle.Parsing.ldap_escape("a=b#c\\")
+      'a\\=b\\#c\\\\'
   """
   def ldap_escape(''), do: ''
 
@@ -77,11 +89,31 @@ defmodule Paddle.Parsing do
 
   def ldap_escape(token), do: ldap_escape(String.to_charlist(token))
 
+  @spec clean_entries([Paddle.eldap_entry]) :: [Paddle.ldap_entry]
+
+  @doc ~S"""
+  Get a binary map representation of several eldap entries.
+
+  Example:
+
+      iex> Paddle.Parsing.clean_entries([{:eldap_entry, 'uid=testuser,ou=People', [{'uid', ['testuser']}]}])
+      [%{"dn" => "uid=testuser,ou=People", "uid" => ["testuser"]}]
+  """
   def clean_entries(entries) do
     entries
     |> Enum.map(&clean_entry/1)
   end
 
+  @spec clean_entry(Paddle.eldap_entry) :: Paddle.ldap_entry
+
+  @doc ~S"""
+  Get a binary map representation of several eldap entries.
+
+  Example:
+
+      iex> Paddle.Parsing.clean_entry({:eldap_entry, 'uid=testuser,ou=People', [{'uid', ['testuser']}]})
+      %{"dn" => "uid=testuser,ou=People", "uid" => ["testuser"]}
+  """
   def clean_entry({:eldap_entry, dn, attributes}) do
     %{"dn" => List.to_string(dn)}
     |> Map.merge(attributes
@@ -93,10 +125,14 @@ defmodule Paddle.Parsing do
   # == Private Utilities ==
   # =======================
 
+  @spec attributes_to_binary([{charlist, [charlist]}]) :: [{binary, [binary]}]
+
   defp attributes_to_binary(attributes) do
     attributes
     |> Enum.map(&attribute_to_binary/1)
   end
+
+  @spec attribute_to_binary({charlist, [charlist]}) :: {binary, [binary]}
 
   defp attribute_to_binary({key, values}) do
     {List.to_string(key),
