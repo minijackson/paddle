@@ -1,5 +1,10 @@
 # Paddle
 
+[![Build Status](https://travis-ci.org/ClubNix/paddle.svg?branch=master)](https://travis-ci.org/ClubNix/paddle)
+[![Deps Status](https://beta.hexfaktor.org/badge/all/github/ClubNix/paddle.svg)](https://beta.hexfaktor.org/github/ClubNix/paddle)
+[![Prod Deps Status](https://beta.hexfaktor.org/badge/prod/github/ClubNix/paddle.svg)](https://beta.hexfaktor.org/github/ClubNix/paddle)
+[![Inline docs](http://inch-ci.org/github/ClubNix/paddle.svg)](http://inch-ci.org/github/ClubNix/paddle)
+
 An library simplifying LDAP usage in Elixir projects.
 
 **Currently work in progress:** you should not use this for now.
