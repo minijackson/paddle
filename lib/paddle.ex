@@ -10,14 +10,14 @@ defmodule Paddle do
       config :paddle, Paddle,
         host: "ldap.my-organisation.org",
         base: "dc=myorganisation,dc=org",
-        where: "People",
+        user_subdn: "ou=People",
         ssl: true,
         port: 636
 
   - `:host` - The host of the LDAP server. Mandatory
   - `:base` - The base DN.
-  - `:where` - Value of the `ou` DN key where the users are located. Defaults
-    to `People`.
+  - `:user_subdn` - The DN (without the base) where the users are located.
+    Defaults to `ou=People`.
   - `:ssl` - When set to `true`, use SSL to connect to the LDAP server.
     Defaults to `false`.
   - `:port` - The port the LDAP server listen to. Defaults to `389`.
@@ -99,7 +99,7 @@ defmodule Paddle do
   end
 
   def handle_call({:authenticate, username, password}, _from, ldap_conn) do
-    dn = Parsing.construct_dn([uid: username, ou: config(:where)], config(:base))
+    dn = Parsing.construct_dn([uid: username], config(:userbase))
     Logger.debug "Checking credentials with dn: #{dn}"
     status = :eldap.simple_bind(ldap_conn, dn, password)
 
@@ -206,12 +206,12 @@ defmodule Paddle do
 
   @spec config(atom) :: any
 
-  defp config(:host),    do: Keyword.get(config, :host) |> :erlang.binary_to_list
-  defp config(:ssl),     do: config(:ssl, false)
-  defp config(:port),    do: config(:port, 389)
-  defp config(:base),    do: config(:base, "")          |> :erlang.binary_to_list
-  defp config(:where),   do: config(:where, "People")   |> :erlang.binary_to_list
-  defp config(:subbase), do: 'ou=' ++ config(:where) ++ ',' ++ config(:base)
+  defp config(:host),       do: Keyword.get(config, :host)       |> :erlang.binary_to_list
+  defp config(:ssl),        do: config(:ssl, false)
+  defp config(:port),       do: config(:port, 389)
+  defp config(:base),       do: config(:base, "")                |> :erlang.binary_to_list
+  defp config(:user_subdn), do: config(:user_subdn, "ou=People") |> :erlang.binary_to_list
+  defp config(:userbase),   do: config(:user_subdn) ++ ',' ++ config(:base)
 
   @spec config(atom, any) :: any
 

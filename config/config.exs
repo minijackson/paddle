@@ -24,7 +24,7 @@ use Mix.Config
 config :paddle, Paddle,
   host: "ldap.my-organisation.org",
   base: "dc=myorganisation,dc=org",
-  where: "People",
+  user_subdn: "ou=People",
   ssl: true,
   port: 636
 
