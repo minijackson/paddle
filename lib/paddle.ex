@@ -111,8 +111,8 @@ defmodule Paddle do
 
   end
 
-  def handle_call({:get, kwdn}, _from, ldap_conn) do
-    dn = Parsing.construct_dn(kwdn, config(:base))
+  def handle_call({:get, kwdn, base}, _from, ldap_conn) do
+    dn = Parsing.construct_dn(kwdn, config(base))
     Logger.debug("Getting entries with dn: #{dn}")
     {:reply,
      :eldap.search(ldap_conn, base: dn, filter: :eldap.present('objectClass'))
@@ -120,8 +120,8 @@ defmodule Paddle do
      ldap_conn}
   end
 
-  def handle_call({:get_single, kwdn}, _from, ldap_conn) do
-    dn = Parsing.construct_dn(kwdn, config(:base))
+  def handle_call({:get_single, kwdn, base}, _from, ldap_conn) do
+    dn = Parsing.construct_dn(kwdn, config(base))
     Logger.debug("Getting single entry with dn: #{dn}")
     {:reply,
      :eldap.search(ldap_conn,
@@ -177,7 +177,7 @@ defmodule Paddle do
       iex> Paddle.get(uid: "nothing")
       {:error, :no_such_object}
   """
-  def get(kwdn), do: GenServer.call(Paddle, {:get, kwdn})
+  def get(kwdn), do: GenServer.call(Paddle, {:get, kwdn, :base})
 
   @spec get_single(keyword) :: {:ok, ldap_entry} | {:error, :no_such_object}
 
@@ -194,7 +194,47 @@ defmodule Paddle do
       iex> Paddle.get_single(uid: "nothing")
       {:error, :no_such_object}
   """
-  def get_single(kwdn), do: GenServer.call(Paddle, {:get_single, kwdn})
+  def get_single(kwdn), do: GenServer.call(Paddle, {:get_single, kwdn, :base})
+
+  @spec users() :: {:ok, [ldap_entry]} | {:error, :no_such_object}
+
+  @doc ~S"""
+  Get several all user entries.
+
+  Example:
+
+      iex> Paddle.users()
+      {:ok,
+       [%{"cn" => ["Test User"],
+         "dn" => "uid=testuser,ou=People,dc=test,dc=com",
+         "gecos" => ["Test User,,,,"], "gidNumber" => ["120"],
+         "homeDirectory" => ["/home/testuser"],
+         "loginShell" => ["/bin/bash"],
+         "objectClass" => ["account", "posixAccount", "top"],
+         "uid" => ["testuser"], "uidNumber" => ["500"],
+         "userPassword" => ["{SSHA}AIzygLSXlArhAMzddUriXQxf7UlkqopP"]}]}
+  """
+  def users(), do: GenServer.call(Paddle, {:get, [], :userbase})
+
+  @spec user(binary | charlist) :: {:ok, ldap_entry} | {:error, :no_such_object}
+
+  @doc ~S"""
+  Get a user entry given a uid.
+
+  Example:
+
+      iex> Paddle.user("testuser")
+      {:ok,
+       %{"cn" => ["Test User"],
+        "dn" => "uid=testuser,ou=People,dc=test,dc=com",
+        "gecos" => ["Test User,,,,"], "gidNumber" => ["120"],
+        "homeDirectory" => ["/home/testuser"],
+        "loginShell" => ["/bin/bash"],
+        "objectClass" => ["account", "posixAccount", "top"],
+        "uid" => ["testuser"], "uidNumber" => ["500"],
+        "userPassword" => ["{SSHA}AIzygLSXlArhAMzddUriXQxf7UlkqopP"]}}
+  """
+  def user(uid), do: GenServer.call(Paddle, {:get_single, [uid: uid], :userbase})
 
   # =======================
   # == Private Utilities ==

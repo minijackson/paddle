@@ -3,6 +3,10 @@ defmodule Paddle.Parsing do
   Module used to parse dn and other LDAP related stuffs.
   """
 
+  # =====================
+  # == DN manipulation ==
+  # =====================
+
   @spec construct_dn(keyword | [{binary, binary}], binary | charlist) :: charlist
 
   @doc ~S"""
@@ -21,6 +25,9 @@ defmodule Paddle.Parsing do
   Note: using a map is discouraged because the key / values may be reordered.
   """
   def construct_dn(map, base \\ '')
+
+  def construct_dn([], base) when is_list(base), do: base
+  def construct_dn([], base), do: String.to_charlist(base)
 
   def construct_dn(map, '') do
     ',' ++ dn = map
