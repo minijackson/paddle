@@ -26,7 +26,8 @@ config :paddle, Paddle,
   base: "dc=myorganisation,dc=org",
   user_subdn: "ou=People",
   ssl: true,
-  port: 636
+  port: 636,
+  account_class: "posixAccount"
 
 # It is also possible to import configuration files, relative to this
 # directory. For example, you can emulate configuration per environment

@@ -29,6 +29,9 @@ defmodule Paddle.Parsing do
   def construct_dn([], base) when is_list(base), do: base
   def construct_dn([], base), do: String.to_charlist(base)
 
+  def construct_dn(nil, base) when is_list(base), do: base
+  def construct_dn(nil, base), do: String.to_charlist(base)
+
   def construct_dn(map, '') do
     ',' ++ dn = map
                 |> Enum.reduce('', fn {key, value}, acc -> acc ++ ',#{key}=#{ldap_escape value}' end)
@@ -126,6 +129,22 @@ defmodule Paddle.Parsing do
     |> Map.merge(attributes
                  |> attributes_to_binary
                  |> Enum.into(%{}))
+  end
+
+  # =========================
+  # == Filter manipulation ==
+  # =========================
+
+  @doc ~S"""
+  Construct a eldap filter from the given keyword list.
+  """
+  def construct_filter(filter) when is_tuple(filter), do: filter
+  def construct_filter(nil), do: :eldap.and([])
+
+  def construct_filter(kwdn) when is_list(kwdn) do
+    criteria = kwdn
+               |> Enum.map(fn {key, value} -> :eldap.equalityMatch('#{key}', '#{value}') end)
+    :eldap.and(criteria)
   end
 
   # =======================

@@ -12,15 +12,18 @@ defmodule Paddle do
         base: "dc=myorganisation,dc=org",
         user_subdn: "ou=People",
         ssl: true,
-        port: 636
+        port: 636,
+        account_class: "inetOrgPerson"
 
   - `:host` - The host of the LDAP server. Mandatory
   - `:base` - The base DN.
   - `:user_subdn` - The DN (without the base) where the users are located.
-    Defaults to `ou=People`.
+    Defaults to `"ou=People"`.
   - `:ssl` - When set to `true`, use SSL to connect to the LDAP server.
     Defaults to `false`.
   - `:port` - The port the LDAP server listen to. Defaults to `389`.
+  - `:account_class` - The class (objectClass) of all your user entries.
+    Defaults to `"posixAccount"`
 
   ## Usage
 
@@ -28,6 +31,27 @@ defmodule Paddle do
 
       Paddle.check_credentials("username", "password")
 
+  Many functions support passing both a base and a filter via a keyword list
+  like so:
+
+      Paddle.get(filter: [uid: "testuser"], base: [ou: "People"])
+
+  A filter in Paddle is a Keyword list and the atom corresponding to the key
+  must have a value strictly equal to, well the given value. When multiple
+  keywords are provided, the result must match all criteria.
+
+  If you are missing some filtering capabilities, you can always pass as
+  argument an `:eldap` filter like so:
+
+      Paddle.get(filter: :eldap.substrings('uid', initial: 'b'))
+
+  You are also provided with some "user" functions that will automatically get
+  the information from the right "directory" and check that the entry have the
+  right objectClass, see [Configuration](#module-configuration).
+
+  Example:
+
+      Paddle.users(filter: [givenName: "User"])
   """
 
   use GenServer
@@ -111,23 +135,25 @@ defmodule Paddle do
 
   end
 
-  def handle_call({:get, kwdn, base}, _from, ldap_conn) do
-    dn = Parsing.construct_dn(kwdn, config(base))
-    Logger.debug("Getting entries with dn: #{dn}")
+  def handle_call({:get, filter, kwdn, base}, _from, ldap_conn) do
+    dn     = Parsing.construct_dn(kwdn, config(base))
+    filter = Parsing.construct_filter(filter)
+    Logger.debug("Getting entries with dn: #{dn} and filter: #{inspect filter}")
     {:reply,
-     :eldap.search(ldap_conn, base: dn, filter: :eldap.present('objectClass'))
+     :eldap.search(ldap_conn, base: dn, filter: filter)
      |> clean_eldap_search_results,
      ldap_conn}
   end
 
-  def handle_call({:get_single, kwdn, base}, _from, ldap_conn) do
-    dn = Parsing.construct_dn(kwdn, config(base))
-    Logger.debug("Getting single entry with dn: #{dn}")
+  def handle_call({:get_single, filter, kwdn, base}, _from, ldap_conn) do
+    dn     = Parsing.construct_dn(kwdn, config(base))
+    filter = Parsing.construct_filter(filter)
+    Logger.debug("Getting single entry with dn: #{dn} and filter: #{inspect filter}")
     {:reply,
      :eldap.search(ldap_conn,
                    base: dn,
                    scope: :eldap.baseObject,
-                   filter: :eldap.present('objectClass'))
+                   filter: filter)
       |> clean_eldap_search_results
       |> ensure_single_result,
      ldap_conn}
@@ -153,7 +179,7 @@ defmodule Paddle do
   end
 
   def check_credentials(username, password) do
-    check_credentials(:erlang.binary_to_list(username), :erlang.binary_to_list(password))
+    check_credentials(String.to_charlist(username), String.to_charlist(password))
   end
 
   @spec get(keyword) :: {:ok, [ldap_entry]} | {:error, :no_such_object}
@@ -163,7 +189,7 @@ defmodule Paddle do
 
   Example:
 
-      iex> Paddle.get(uid: "testuser", ou: "People")
+      iex> Paddle.get(base: [uid: "testuser", ou: "People"])
       {:ok,
        [%{"cn" => ["Test User"],
          "dn" => "uid=testuser,ou=People,dc=test,dc=com",
@@ -174,10 +200,27 @@ defmodule Paddle do
          "uid" => ["testuser"], "uidNumber" => ["500"],
          "userPassword" => ["{SSHA}AIzygLSXlArhAMzddUriXQxf7UlkqopP"]}]}
 
-      iex> Paddle.get(uid: "nothing")
+      iex> Paddle.get(base: [uid: "nothing"])
       {:error, :no_such_object}
+
+      iex> Paddle.get(filter: [uid: "testuser"], base: [ou: "People"])
+      {:ok,
+       [%{"cn" => ["Test User"],
+         "dn" => "uid=testuser,ou=People,dc=test,dc=com",
+         "gecos" => ["Test User,,,,"], "gidNumber" => ["120"],
+         "homeDirectory" => ["/home/testuser"],
+         "loginShell" => ["/bin/bash"],
+         "objectClass" => ["account", "posixAccount", "top"],
+         "uid" => ["testuser"], "uidNumber" => ["500"],
+         "userPassword" => ["{SSHA}AIzygLSXlArhAMzddUriXQxf7UlkqopP"]}]}
   """
-  def get(kwdn), do: GenServer.call(Paddle, {:get, kwdn, :base})
+  def get(kwdn) do
+    GenServer.call(Paddle,
+                   {:get,
+                    Keyword.get(kwdn, :filter),
+                    Keyword.get(kwdn, :base),
+                    :base})
+  end
 
   @spec get_single(keyword) :: {:ok, ldap_entry} | {:error, :no_such_object}
 
@@ -186,20 +229,29 @@ defmodule Paddle do
 
   Example:
 
-      iex> Paddle.get_single(ou: "People")
+      iex> Paddle.get_single(base: [ou: "People"])
       {:ok,
        %{"dn" => "ou=People,dc=test,dc=com",
         "objectClass" => ["organizationalUnit"], "ou" => ["People"]}}
 
-      iex> Paddle.get_single(uid: "nothing")
+      iex> Paddle.get_single(filter: [uid: "nothing"])
       {:error, :no_such_object}
   """
-  def get_single(kwdn), do: GenServer.call(Paddle, {:get_single, kwdn, :base})
+  def get_single(kwdn) do
+    GenServer.call(Paddle,
+                   {:get_single,
+                    Keyword.get(kwdn, :filter),
+                    Keyword.get(kwdn, :base),
+                    :base})
+  end
 
   @spec users() :: {:ok, [ldap_entry]} | {:error, :no_such_object}
 
   @doc ~S"""
-  Get several all user entries.
+  Get all user entries.
+
+  You can give an additional filter via the `filter:` keyword, but you are not
+  allowed to specify the base.
 
   Example:
 
@@ -214,7 +266,13 @@ defmodule Paddle do
          "uid" => ["testuser"], "uidNumber" => ["500"],
          "userPassword" => ["{SSHA}AIzygLSXlArhAMzddUriXQxf7UlkqopP"]}]}
   """
-  def users(), do: GenServer.call(Paddle, {:get, [], :userbase})
+  def users(kwdn \\ []) do
+    GenServer.call(Paddle,
+                   {:get,
+                    user_filter(Keyword.get(kwdn, :filter)),
+                    Keyword.get(kwdn, :base),
+                    :userbase})
+  end
 
   @spec user(binary | charlist) :: {:ok, ldap_entry} | {:error, :no_such_object}
 
@@ -234,7 +292,12 @@ defmodule Paddle do
         "uid" => ["testuser"], "uidNumber" => ["500"],
         "userPassword" => ["{SSHA}AIzygLSXlArhAMzddUriXQxf7UlkqopP"]}}
   """
-  def user(uid), do: GenServer.call(Paddle, {:get_single, [uid: uid], :userbase})
+  def user(uid) do
+    GenServer.call(Paddle,
+                   {:get_single,
+                    user_filter,
+                    [uid: uid], :userbase})
+  end
 
   # =======================
   # == Private Utilities ==
@@ -246,12 +309,13 @@ defmodule Paddle do
 
   @spec config(atom) :: any
 
-  defp config(:host),       do: Keyword.get(config, :host)       |> :erlang.binary_to_list
-  defp config(:ssl),        do: config(:ssl, false)
-  defp config(:port),       do: config(:port, 389)
-  defp config(:base),       do: config(:base, "")                |> :erlang.binary_to_list
-  defp config(:user_subdn), do: config(:user_subdn, "ou=People") |> :erlang.binary_to_list
-  defp config(:userbase),   do: config(:user_subdn) ++ ',' ++ config(:base)
+  defp config(:host),          do: Keyword.get(config, :host)             |> String.to_charlist
+  defp config(:ssl),           do: config(:ssl, false)
+  defp config(:port),          do: config(:port, 389)
+  defp config(:base),          do: config(:base, "")                      |> String.to_charlist
+  defp config(:user_subdn),    do: config(:user_subdn, "ou=People")       |> String.to_charlist
+  defp config(:userbase),      do: config(:user_subdn) ++ ',' ++ config(:base)
+  defp config(:account_class), do: config(:account_class, "posixAccount") |> String.to_charlist
 
   @spec config(atom, any) :: any
 
@@ -267,6 +331,10 @@ defmodule Paddle do
     end
   end
 
+  defp clean_eldap_search_results({:ok, {:eldap_search_result, [], []}}) do
+    {:error, :no_such_object}
+  end
+
   defp clean_eldap_search_results({:ok, {:eldap_search_result, entries, []}}) do
     {:ok, Parsing.clean_entries(entries)}
   end
@@ -280,6 +348,17 @@ defmodule Paddle do
     end
   end
 
+  defp ensure_single_result({:ok, []}), do: {:error, :no_such_object}
   defp ensure_single_result({:ok, [result]}), do: {:ok, result}
+
+  defp user_filter, do: :eldap.equalityMatch('objectClass', config(:account_class))
+
+  defp user_filter(nil), do: :eldap.equalityMatch('objectClass', config(:account_class))
+  defp user_filter([]),  do: :eldap.equalityMatch('objectClass', config(:account_class))
+
+  defp user_filter(filter) do
+    filter = Parsing.construct_filter(filter)
+    :eldap.and([filter, :eldap.equalityMatch('objectClass', config(:account_class))])
+  end
 
 end
