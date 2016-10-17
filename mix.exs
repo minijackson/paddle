@@ -7,7 +7,10 @@ defmodule Paddle.Mixfile do
      elixir: "~> 1.3",
      build_embedded: Mix.env == :prod,
      start_permanent: Mix.env == :prod,
-     deps: deps()]
+     deps: deps(),
+     source_url: "https://github.com/ClubNix/paddle",
+     homepage_url: "https://github.com/ClubNix/paddle",
+     docs: [extras: ["README.md"]]]
   end
 
   # Configuration for the OTP application

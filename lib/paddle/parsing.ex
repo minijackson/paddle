@@ -10,7 +10,7 @@ defmodule Paddle.Parsing do
   @spec construct_dn(keyword | [{binary, binary}], binary | charlist) :: charlist
 
   @doc ~S"""
-  Construct a DN Erlang string based on a keyword list.
+  Construct a DN Erlang string based on a keyword list or a string.
 
   Examples:
 
@@ -18,6 +18,9 @@ defmodule Paddle.Parsing do
       'uid=user,ou=People'
 
       iex> Paddle.Parsing.construct_dn([{"uid", "user"}, {"ou", "People"}], "dc=organisation,dc=org")
+      'uid=user,ou=People,dc=organisation,dc=org'
+
+      iex> Paddle.Parsing.construct_dn("uid=user,ou=People", "dc=organisation,dc=org")
       'uid=user,ou=People,dc=organisation,dc=org'
 
   Values are escaped.
@@ -28,6 +31,9 @@ defmodule Paddle.Parsing do
 
   def construct_dn([], base) when is_list(base), do: base
   def construct_dn([], base), do: String.to_charlist(base)
+
+  def construct_dn(subdn, base) when is_binary(subdn) and is_list(base), do: String.to_charlist(subdn) ++ ',' ++ base
+  def construct_dn(subdn, base) when is_binary(subdn), do: String.to_charlist(subdn) ++ ',' ++ String.to_charlist(base)
 
   def construct_dn(nil, base) when is_list(base), do: base
   def construct_dn(nil, base), do: String.to_charlist(base)
@@ -137,6 +143,26 @@ defmodule Paddle.Parsing do
 
   @doc ~S"""
   Construct a eldap filter from the given keyword list.
+
+  If given an `:eldap` filter (a tuple), it is returned as is.
+
+  If given `nil`, it will return an empty filter (`:eldap.and([])`).
+
+  Examples:
+
+      iex> Paddle.Parsing.construct_filter(:eldap.substrings('uid', initial: 'b'))
+      {:substrings, {:SubstringFilter, 'uid', [initial: 'b']}}
+
+      iex> Paddle.Parsing.construct_filter(nil)
+      {:and, []}
+
+      iex> Paddle.Parsing.construct_filter([])
+      {:and, []}
+
+      iex> Paddle.Parsing.construct_filter(uid: "testuser", ou: "People")
+      {:and,
+       [equalityMatch: {:AttributeValueAssertion, 'uid', 'testuser'},
+        equalityMatch: {:AttributeValueAssertion, 'ou', 'People'}]}
   """
   def construct_filter(filter) when is_tuple(filter), do: filter
   def construct_filter(nil), do: :eldap.and([])

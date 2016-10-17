@@ -36,6 +36,16 @@ defmodule Paddle do
 
       Paddle.get(filter: [uid: "testuser"], base: [ou: "People"])
 
+  You are also provided with some "user" functions that will automatically get
+  the information from the right "directory" and check that the entry have the
+  right objectClass, see [Configuration](#module-configuration).
+
+  Example:
+
+      Paddle.users(filter: [givenName: "User"])
+
+  ### Filters
+
   A filter in Paddle is a Keyword list and the atom corresponding to the key
   must have a value strictly equal to, well the given value. When multiple
   keywords are provided, the result must match all criteria.
@@ -45,13 +55,14 @@ defmodule Paddle do
 
       Paddle.get(filter: :eldap.substrings('uid', initial: 'b'))
 
-  You are also provided with some "user" functions that will automatically get
-  the information from the right "directory" and check that the entry have the
-  right objectClass, see [Configuration](#module-configuration).
+  For more informations and examples, see `Paddle.Parsing.construct_filter/1`
 
-  Example:
+  ### Bases
 
-      Paddle.users(filter: [givenName: "User"])
+  A base in Paddle can be a Keyword list that will be converted to a charlist
+  to be passed on to the `:eldap` module. A direct string can also be passed.
+
+  For more informations and examples, see `Paddle.Parsing.construct_dn/2`
   """
 
   use GenServer
@@ -190,6 +201,17 @@ defmodule Paddle do
   Example:
 
       iex> Paddle.get(base: [uid: "testuser", ou: "People"])
+      {:ok,
+       [%{"cn" => ["Test User"],
+         "dn" => "uid=testuser,ou=People,dc=test,dc=com",
+         "gecos" => ["Test User,,,,"], "gidNumber" => ["120"],
+         "homeDirectory" => ["/home/testuser"],
+         "loginShell" => ["/bin/bash"],
+         "objectClass" => ["account", "posixAccount", "top"],
+         "uid" => ["testuser"], "uidNumber" => ["500"],
+         "userPassword" => ["{SSHA}AIzygLSXlArhAMzddUriXQxf7UlkqopP"]}]}
+
+      iex> Paddle.get(base: "uid=testuser,ou=People")
       {:ok,
        [%{"cn" => ["Test User"],
          "dn" => "uid=testuser,ou=People,dc=test,dc=com",
