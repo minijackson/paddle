@@ -1,6 +1,12 @@
 dn: ou=People,dc=test,dc=com
-objectclass: organizationalunit
+objectClass: top
+objectClass: organizationalUnit
 ou: People
+
+dn: ou=Group,dc=test,dc=com
+objectClass: top
+objectClass: organizationalUnit
+ou: Group
 
 dn: uid=testuser,ou=People,dc=test,dc=com
 uid: testuser
@@ -8,10 +14,23 @@ cn: Test User
 objectClass: account
 objectClass: posixAccount
 objectClass: top
-loginshell: /bin/bash
-uidnumber: 500
-gidnumber: 120
-homedirectory: /home/testuser
+loginShell: /bin/bash
+uidNumber: 500
+gidNumber: 120
+homeDirectory: /home/testuser
 gecos: Test User,,,,
-userpassword: {SSHA}AIzygLSXlArhAMzddUriXQxf7UlkqopP
+userPassword: {SSHA}AIzygLSXlArhAMzddUriXQxf7UlkqopP
 # userpassword: {CLEARTEXT}test
+
+dn: cn=users,ou=Group,dc=test,dc=com
+cn: users
+objectClass: top
+objectClass: posixGroup
+gidNumber: 2
+memberUid: testuser
+
+dn: cn=adm,ou=Group,dc=test,dc=com
+cn: adm
+objectClass: top
+objectClass: posixGroup
+gidNumber: 2

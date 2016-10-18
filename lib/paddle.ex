@@ -10,20 +10,26 @@ defmodule Paddle do
       config :paddle, Paddle,
         host: "ldap.my-organisation.org",
         base: "dc=myorganisation,dc=org",
-        user_subdn: "ou=People",
         ssl: true,
         port: 636,
-        account_class: "inetOrgPerson"
+        account_subdn: "ou=People",
+        group_subdn: "ou=Group",
+        account_class: "inetOrgPerson",
+        group_class: "posixGroup"
 
   - `:host` - The host of the LDAP server. Mandatory
   - `:base` - The base DN.
-  - `:user_subdn` - The DN (without the base) where the users are located.
-    Defaults to `"ou=People"`.
   - `:ssl` - When set to `true`, use SSL to connect to the LDAP server.
     Defaults to `false`.
   - `:port` - The port the LDAP server listen to. Defaults to `389`.
+  - `:account_subdn` - The DN (without the base) where the accounts are located.
+    Defaults to `"ou=People"`.
+  - `:group_subdn` - The DN (without the base) where the groups are located.
+    Defaults to `"ou=Group"`.
   - `:account_class` - The class (objectClass) of all your user entries.
     Defaults to `"posixAccount"`
+  - `:group_class` - The class (objectClass) of all your group entries.
+    Defaults to `"posixGroup"`
 
   ## Usage
 
@@ -134,7 +140,7 @@ defmodule Paddle do
   end
 
   def handle_call({:authenticate, username, password}, _from, ldap_conn) do
-    dn = Parsing.construct_dn([uid: username], config(:userbase))
+    dn = Parsing.construct_dn([uid: username], config(:account_base))
     Logger.debug "Checking credentials with dn: #{dn}"
     status = :eldap.simple_bind(ldap_conn, dn, password)
 
@@ -254,7 +260,7 @@ defmodule Paddle do
       iex> Paddle.get_single(base: [ou: "People"])
       {:ok,
        %{"dn" => "ou=People,dc=test,dc=com",
-        "objectClass" => ["organizationalUnit"], "ou" => ["People"]}}
+        "objectClass" => ["top", "organizationalUnit"], "ou" => ["People"]}}
 
       iex> Paddle.get_single(filter: [uid: "nothing"])
       {:error, :no_such_object}
@@ -291,9 +297,9 @@ defmodule Paddle do
   def users(kwdn \\ []) do
     GenServer.call(Paddle,
                    {:get,
-                    user_filter(Keyword.get(kwdn, :filter)),
+                    account_filter(Keyword.get(kwdn, :filter)),
                     Keyword.get(kwdn, :base),
-                    :userbase})
+                    :account_base})
   end
 
   @spec user(binary | charlist) :: {:ok, ldap_entry} | {:error, :no_such_object}
@@ -317,8 +323,81 @@ defmodule Paddle do
   def user(uid) do
     GenServer.call(Paddle,
                    {:get_single,
-                    user_filter,
-                    [uid: uid], :userbase})
+                    account_filter,
+                    [uid: uid], :account_base})
+  end
+
+  @spec groups() :: {:ok, [ldap_entry]} | {:error, :no_such_object}
+
+  @doc ~S"""
+  Get all group entries.
+
+  You can give an additional filter via the `filter:` keyword, but you are not
+  allowed to specify the base.
+
+  Example:
+
+      iex> Paddle.groups()
+      {:ok,
+       [%{"cn" => ["users"], "dn" => "cn=users,ou=Group,dc=test,dc=com",
+         "gidNumber" => ["2"], "memberUid" => ["testuser"],
+         "objectClass" => ["top", "posixGroup"]},
+        %{"cn" => ["adm"], "dn" => "cn=adm,ou=Group,dc=test,dc=com",
+         "gidNumber" => ["2"], "objectClass" => ["top", "posixGroup"]}]}
+  """
+  def groups(kwdn \\ []) do
+    GenServer.call(Paddle,
+                   {:get,
+                    group_filter(Keyword.get(kwdn, :filter)),
+                    Keyword.get(kwdn, :base),
+                    :group_base})
+  end
+
+  @spec group(binary | charlist) :: {:ok, ldap_entry} | {:error, :no_such_object}
+
+  @doc ~S"""
+  Get a group entry given the group name (cn).
+
+  Example:
+
+      iex> Paddle.group("adm")
+      {:ok,
+       %{"cn" => ["adm"], "dn" => "cn=adm,ou=Group,dc=test,dc=com",
+        "gidNumber" => ["2"], "objectClass" => ["top", "posixGroup"]}}
+  """
+  def group(cn) do
+    GenServer.call(Paddle,
+                   {:get_single,
+                    group_filter,
+                    [cn: cn], :group_base})
+  end
+
+  @spec users_from_group(binary | charlist) :: {:ok, [ldap_entry]} | {:error, :no_such_object}
+
+  @doc ~S"""
+  Get all user entries belonging to a given group (specified by cn)
+
+  Example:
+
+      iex> Paddle.users_from_group("users")
+      {:ok,
+       [%{"cn" => ["Test User"],
+         "dn" => "uid=testuser,ou=People,dc=test,dc=com",
+         "gecos" => ["Test User,,,,"], "gidNumber" => ["120"],
+         "homeDirectory" => ["/home/testuser"],
+         "loginShell" => ["/bin/bash"],
+         "objectClass" => ["account", "posixAccount", "top"],
+         "uid" => ["testuser"], "uidNumber" => ["500"],
+         "userPassword" => ["{SSHA}AIzygLSXlArhAMzddUriXQxf7UlkqopP"]}]}
+  """
+  def users_from_group(cn) do
+    {:ok, entry} = group(cn)
+
+    filter = entry
+             |> Map.fetch!("memberUid")
+             |> Enum.map(fn uid -> :eldap.equalityMatch('uid', String.to_charlist(uid)) end)
+             |> :eldap.or
+    users(filter: filter)
   end
 
   # =======================
@@ -335,9 +414,12 @@ defmodule Paddle do
   defp config(:ssl),           do: config(:ssl, false)
   defp config(:port),          do: config(:port, 389)
   defp config(:base),          do: config(:base, "")                      |> String.to_charlist
-  defp config(:user_subdn),    do: config(:user_subdn, "ou=People")       |> String.to_charlist
-  defp config(:userbase),      do: config(:user_subdn) ++ ',' ++ config(:base)
+  defp config(:account_base),  do: config(:account_subdn) ++ ',' ++ config(:base)
+  defp config(:group_base),    do: config(:group_subdn)   ++ ',' ++ config(:base)
+  defp config(:account_subdn), do: config(:account_subdn, "ou=People")    |> String.to_charlist
+  defp config(:group_subdn),   do: config(:group_subdn, "ou=Group")       |> String.to_charlist
   defp config(:account_class), do: config(:account_class, "posixAccount") |> String.to_charlist
+  defp config(:group_class),   do: config(:group_class, "posixGroup")     |> String.to_charlist
 
   @spec config(atom, any) :: any
 
@@ -373,14 +455,20 @@ defmodule Paddle do
   defp ensure_single_result({:ok, []}), do: {:error, :no_such_object}
   defp ensure_single_result({:ok, [result]}), do: {:ok, result}
 
-  defp user_filter, do: :eldap.equalityMatch('objectClass', config(:account_class))
+  defp account_filter, do: class_filter(:account_class)
+  defp account_filter(filter), do: class_filter(filter, :account_class)
 
-  defp user_filter(nil), do: :eldap.equalityMatch('objectClass', config(:account_class))
-  defp user_filter([]),  do: :eldap.equalityMatch('objectClass', config(:account_class))
+  defp group_filter, do: class_filter(:group_class)
+  defp group_filter(filter), do: class_filter(filter, :group_class)
 
-  defp user_filter(filter) do
+  defp class_filter(class), do: :eldap.equalityMatch('objectClass', config(class))
+
+  defp class_filter(nil, class), do: :eldap.equalityMatch('objectClass', config(class))
+  defp class_filter([], class),  do: :eldap.equalityMatch('objectClass', config(class))
+
+  defp class_filter(filter, class) do
     filter = Parsing.construct_filter(filter)
-    :eldap.and([filter, :eldap.equalityMatch('objectClass', config(:account_class))])
+    :eldap.and([filter, :eldap.equalityMatch('objectClass', config(class))])
   end
 
 end
