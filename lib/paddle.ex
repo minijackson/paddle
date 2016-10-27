@@ -400,6 +400,22 @@ defmodule Paddle do
     users(filter: filter)
   end
 
+  @spec groups_of_user(binary | charlist) :: {:ok, [ldap_entry]} | {:error, :no_such_object}
+
+  @doc ~S"""
+  Get all group entries which a given user belongs to.
+
+  Example:
+
+      iex> Paddle.groups_of_user("testuser")
+      {:ok,
+       [%{"cn" => ["users"], "dn" => "cn=users,ou=Group,dc=test,dc=com",
+         "gidNumber" => ["2"], "memberUid" => ["testuser"],
+         "objectClass" => ["top", "posixGroup"]}]}
+  """
+  def groups_of_user(uid) when is_list(uid), do: groups(filter: :eldap.equalityMatch('memberUid', uid))
+  def groups_of_user(uid), do: String.to_charlist(uid) |> groups_of_user
+
   # =======================
   # == Private Utilities ==
   # =======================
