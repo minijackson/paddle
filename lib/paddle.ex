@@ -85,7 +85,7 @@ defmodule Paddle do
 
   unless Application.get_env(:paddle, Paddle) do
     raise """
-    Please configure the LDPA in the config files
+    Please configure the LDAP in the config files
     See the `Paddle` module documentation.
     """
   end
@@ -144,18 +144,19 @@ defmodule Paddle do
     Logger.debug "Checking credentials with dn: #{dn}"
     status = :eldap.simple_bind(ldap_conn, dn, password)
 
-   case status do
-     :ok -> {:reply, status, ldap_conn}
-     {:error, :invalidCredentials} -> {:reply, {:error, :invalid_credentials}, ldap_conn}
-     {:error, :anonymous_auth} -> {:reply, status, ldap_conn}
+    case status do
+      :ok -> {:reply, status, ldap_conn}
+      {:error, :invalidCredentials} -> {:reply, {:error, :invalid_credentials}, ldap_conn}
+      {:error, :anonymous_auth} -> {:reply, status, ldap_conn}
     end
-
   end
 
   def handle_call({:get, filter, kwdn, base}, _from, ldap_conn) do
     dn     = Parsing.construct_dn(kwdn, config(base))
     filter = Parsing.construct_filter(filter)
+
     Logger.debug("Getting entries with dn: #{dn} and filter: #{inspect filter}")
+
     {:reply,
      :eldap.search(ldap_conn, base: dn, filter: filter)
      |> clean_eldap_search_results,
@@ -165,7 +166,9 @@ defmodule Paddle do
   def handle_call({:get_single, filter, kwdn, base}, _from, ldap_conn) do
     dn     = Parsing.construct_dn(kwdn, config(base))
     filter = Parsing.construct_filter(filter)
+
     Logger.debug("Getting single entry with dn: #{dn} and filter: #{inspect filter}")
+
     {:reply,
      :eldap.search(ldap_conn,
                    base: dn,
@@ -174,6 +177,27 @@ defmodule Paddle do
       |> clean_eldap_search_results
       |> ensure_single_result,
      ldap_conn}
+  end
+
+  def handle_call({:add, kwdn, attributes, base}, _from, ldap_conn) do
+    dn = Parsing.construct_dn(kwdn, config(base))
+    attributes = attributes
+                 |> Enum.map(fn {key, value} -> {'#{key}', list_wrap value} end)
+
+    status = :eldap.add(ldap_conn, dn, attributes)
+
+    {:reply,
+     case status do
+       {:error, :undefinedAttributeType} -> {:error, :undefined_attribute_type}
+       {:error, :objectClassViolation} -> {:error, :object_class_violation}
+     end,
+     ldap_conn}
+  end
+
+  def handle_call({:delete, kwdn, base}, _from, ldap_conn) do
+    dn = Parsing.construct_dn(kwdn, config(base))
+
+    {:reply, :eldap.delete(ldap_conn, dn), ldap_conn}
   end
 
   @spec check_credentials(charlist | binary, charlist | binary) :: boolean
@@ -198,6 +222,10 @@ defmodule Paddle do
   def check_credentials(username, password) do
     check_credentials(String.to_charlist(username), String.to_charlist(password))
   end
+
+  # =============
+  # == Getting ==
+  # =============
 
   @spec get(keyword) :: {:ok, [ldap_entry]} | {:error, :no_such_object}
 
@@ -416,6 +444,41 @@ defmodule Paddle do
   def groups_of_user(uid) when is_list(uid), do: groups(filter: :eldap.equalityMatch('memberUid', uid))
   def groups_of_user(uid), do: String.to_charlist(uid) |> groups_of_user
 
+  # ============
+  # == Adding ==
+  # ============
+
+  @doc ~S"""
+  Add an entry to the ldap.
+
+  The first argument is the DN given as a string or keyword list as usual.
+  The second argument is the list of attributes in the new entry as a keyword
+  list like so:
+
+      [objectClass: ["account", "posixAccount"],
+       cn: "User",
+       loginShell: "/bin/bash",
+       homeDirectory: "/home/user",
+       uidNumber: 501,
+       gidNumber: 100]
+
+  Please note that due to the limitation of char lists you cannot pass directly
+  a char list as an attribute value. But, you can wrap it in an array like
+  this: `homeDirectory: ['/home/user']`
+
+  Note that even if the above example is about adding a new user, you should
+  probably use `add_user/2`.
+  """
+  def add(kwdn, attributes), do: GenServer.call(Paddle, {:add, kwdn, attributes, :base})
+
+  def add_user(uid, attributes), do: GenServer.call(Paddle, {:add, [uid: uid], :account_base})
+
+  # ==============
+  # == Deleting ==
+  # ==============
+
+  def delete(kwdn), do: GenServer.call(Paddle, {:delete, kwdn, :base})
+
   # =======================
   # == Private Utilities ==
   # =======================
@@ -486,5 +549,8 @@ defmodule Paddle do
     filter = Parsing.construct_filter(filter)
     :eldap.and([filter, :eldap.equalityMatch('objectClass', config(class))])
   end
+
+  defp list_wrap(list) when is_list(list), do: list |> Enum.map(&'#{&1}')
+  defp list_wrap(thing), do: ['#{thing}']
 
 end
