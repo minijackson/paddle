@@ -75,6 +75,7 @@ defmodule Paddle do
   require Logger
 
   alias Paddle.Parsing
+  alias Paddle.Attributes
 
   @type ldap_conn :: :eldap.handle
   @type ldap_entry :: %{required(binary) => binary}
@@ -88,6 +89,10 @@ defmodule Paddle do
     Please configure the LDAP in the config files
     See the `Paddle` module documentation.
     """
+  end
+
+  def start(_type, _args) do
+    __MODULE__.start_link
   end
 
   @spec start_link() :: Genserver.on_start
@@ -181,13 +186,18 @@ defmodule Paddle do
 
   def handle_call({:add, kwdn, attributes, base}, _from, ldap_conn) do
     dn = Parsing.construct_dn(kwdn, config(base))
+
+    Logger.info("Adding entry with dn: #{dn}")
+
     attributes = attributes
-                 |> Enum.map(fn {key, value} -> {'#{key}', list_wrap value} end)
+                 |> Enum.filter_map(fn {_key, value} -> value != nil end,
+                                    fn {key, value} -> {'#{key}', list_wrap value} end)
 
     status = :eldap.add(ldap_conn, dn, attributes)
 
     {:reply,
      case status do
+       :ok -> :ok
        {:error, :undefinedAttributeType} -> {:error, :undefined_attribute_type}
        {:error, :objectClassViolation} -> {:error, :object_class_violation}
      end,
@@ -221,6 +231,29 @@ defmodule Paddle do
 
   def check_credentials(username, password) do
     check_credentials(String.to_charlist(username), String.to_charlist(password))
+  end
+
+  @spec get_dn(struct) :: {:ok, binary} | {:error, :missing_unique_identifier}
+
+  @doc ~S"""
+  Get the DN of an entry.
+
+  Example:
+
+      iex> Paddle.get_dn(%Paddle.PosixAccount{uid: "testuser"})
+      {:ok, "uid=testuser,ou=People"}
+  """
+  def get_dn(object) do
+    subdn = Paddle.Class.location(object)
+
+    id_field = Paddle.Class.unique_identifier(object)
+    id_value = Map.get(object, id_field)
+
+    if id_value do
+      {:ok, "#{id_field}=#{id_value},#{subdn}"}
+    else
+      {:error, :missing_unique_identifier}
+    end
   end
 
   # =============
@@ -278,6 +311,26 @@ defmodule Paddle do
                     :base})
   end
 
+  def get_all(object, additional_filter \\ []) do
+    fields_filter = object
+             |> Map.from_struct
+             |> Enum.filter(fn {_key, value} -> value != nil end)
+    filter = class_filter(Paddle.Class.object_classes(object))
+             |> merge_filter(Parsing.construct_filter(fields_filter))
+             |> merge_filter(additional_filter)
+    location = Paddle.Class.location(object)
+    with {:ok, result} <- GenServer.call(Paddle, {:get, filter, location, :base}) do
+      {:ok,
+       result
+       |> Enum.map(&entry_to_struct(&1, object))}
+    end
+  end
+
+  def get_all!(object, additional_filter \\ []) do
+    {:ok, result} = get_all(object, additional_filter)
+    result
+  end
+
   @spec get_single(keyword) :: {:ok, ldap_entry} | {:error, :no_such_object}
 
   @doc ~S"""
@@ -301,7 +354,7 @@ defmodule Paddle do
                     :base})
   end
 
-  @spec users() :: {:ok, [ldap_entry]} | {:error, :no_such_object}
+  @spec users(keyword) :: {:ok, [ldap_entry]} | {:error, :no_such_object}
 
   @doc ~S"""
   Get all user entries.
@@ -325,7 +378,7 @@ defmodule Paddle do
   def users(kwdn \\ []) do
     GenServer.call(Paddle,
                    {:get,
-                    account_filter(Keyword.get(kwdn, :filter)),
+                    class_filter(Keyword.get(kwdn, :filter), ["account", "posixAccount"]),
                     Keyword.get(kwdn, :base),
                     :account_base})
   end
@@ -351,7 +404,7 @@ defmodule Paddle do
   def user(uid) do
     GenServer.call(Paddle,
                    {:get_single,
-                    account_filter,
+                    class_filter(["account", "posixAccount"]),
                     [uid: uid], :account_base})
   end
 
@@ -376,7 +429,7 @@ defmodule Paddle do
   def groups(kwdn \\ []) do
     GenServer.call(Paddle,
                    {:get,
-                    group_filter(Keyword.get(kwdn, :filter)),
+                    class_filter(Keyword.get(kwdn, :filter), "posixGroup"),
                     Keyword.get(kwdn, :base),
                     :group_base})
   end
@@ -396,7 +449,7 @@ defmodule Paddle do
   def group(cn) do
     GenServer.call(Paddle,
                    {:get_single,
-                    group_filter,
+                    class_filter("posixGroup"),
                     [cn: cn], :group_base})
   end
 
@@ -448,8 +501,13 @@ defmodule Paddle do
   # == Adding ==
   # ============
 
+  @type attributes :: keyword | %{required(binary) => binary} | [{binary, binary}]
+  @type add_ldap_error :: {:error, :undefined_attribute_type} | {:error, :object_class_violation}
+
+  @spec add(keyword, attributes) :: :ok | add_ldap_error
+
   @doc ~S"""
-  Add an entry to the ldap.
+  Add an entry to the LDAP.
 
   The first argument is the DN given as a string or keyword list as usual.
   The second argument is the list of attributes in the new entry as a keyword
@@ -471,13 +529,23 @@ defmodule Paddle do
   """
   def add(kwdn, attributes), do: GenServer.call(Paddle, {:add, kwdn, attributes, :base})
 
-  def add_user(uid, attributes), do: GenServer.call(Paddle, {:add, [uid: uid], :account_base})
+  def add(class_object) do
+    with {:ok, dn} <- get_dn(class_object),
+         {:ok, attributes} <- Attributes.get(class_object) do
+      add(dn, attributes)
+    end
+  end
 
   # ==============
   # == Deleting ==
   # ==============
 
-  def delete(kwdn), do: GenServer.call(Paddle, {:delete, kwdn, :base})
+  def delete(kwdn) when is_list(kwdn) or is_binary(kwdn), do: GenServer.call(Paddle, {:delete, kwdn, :base})
+  def delete(class_object) when is_map(class_object) do
+    with {:ok, dn} <- get_dn(class_object) do
+      GenServer.call(Paddle, {:delete, dn, :base})
+    end
+  end
 
   # =======================
   # == Private Utilities ==
@@ -522,7 +590,16 @@ defmodule Paddle do
     {:ok, Parsing.clean_entries(entries)}
   end
 
-  @spec ensure_single_result({:ok, [ldap_entry]} | {:error, :no_such_object})
+  defp entry_to_struct(entry, target) do
+    entry = entry
+            |> Map.drop(["dn", "objectClass"])
+            |> Enum.map(fn {key, value} -> {String.to_atom(key), value} end)
+            |> Enum.into(%{})
+
+    Map.merge(target, entry)
+  end
+
+  @spec ensure_single_result({:ok, [ldap_entry]} | {:error, atom})
   :: {:ok, ldap_entry} | {:error, :no_such_object}
 
   defp ensure_single_result({:error, error}) do
@@ -534,20 +611,37 @@ defmodule Paddle do
   defp ensure_single_result({:ok, []}), do: {:error, :no_such_object}
   defp ensure_single_result({:ok, [result]}), do: {:ok, result}
 
-  defp account_filter, do: class_filter(:account_class)
-  defp account_filter(filter), do: class_filter(filter, :account_class)
+  for lhs <- [[], nil], rhs <- [[], nil] do
+    def merge_filter(unquote(lhs), unquote(rhs)), do: :eldap.and([])
+  end
 
-  defp group_filter, do: class_filter(:group_class)
-  defp group_filter(filter), do: class_filter(filter, :group_class)
+  for null_filter <- [[], nil] do
+    def merge_filter(filter, unquote(null_filter)), do: filter
+    def merge_filter(unquote(null_filter), filter), do: filter
+  end
 
-  defp class_filter(class), do: :eldap.equalityMatch('objectClass', config(class))
+  def merge_filter({:and, lcond}, {:and, rcond}), do: {:and, lcond ++ rcond}
+  def merge_filter({:and, lcond}, rhs), do: {:and, [Parsing.construct_filter(rhs) | lcond]}
+  def merge_filter(lhs, {:and, rcond}), do: {:and, [Parsing.construct_filter(lhs) | rcond]}
 
-  defp class_filter(nil, class), do: :eldap.equalityMatch('objectClass', config(class))
-  defp class_filter([], class),  do: :eldap.equalityMatch('objectClass', config(class))
+  def merge_filter(lhs, rhs) do
+    :eldap.and([Parsing.construct_filter(lhs), Parsing.construct_filter(rhs)])
+  end
+
+  defp class_filter(classes) when is_list(classes) do
+    classes
+    |> Enum.map(&:eldap.equalityMatch('objectClass', '#{&1}'))
+    |> :eldap.and
+  end
+
+  defp class_filter(class), do: :eldap.equalityMatch('objectClass', '#{class}')
+
+  defp class_filter(nil, class), do: class_filter(class)
+  defp class_filter([], class),  do: class_filter(class)
 
   defp class_filter(filter, class) do
     filter = Parsing.construct_filter(filter)
-    :eldap.and([filter, :eldap.equalityMatch('objectClass', config(class))])
+    :eldap.and([filter, class_filter(class)])
   end
 
   defp list_wrap(list) when is_list(list), do: list |> Enum.map(&'#{&1}')
