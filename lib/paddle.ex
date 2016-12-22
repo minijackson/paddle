@@ -61,20 +61,21 @@ defmodule Paddle do
 
       Paddle.get(filter: :eldap.substrings('uid', initial: 'b'))
 
-  For more informations and examples, see `Paddle.Parsing.construct_filter/1`
+  For more informations and examples, see `Paddle.Filters.construct_filter/1`
 
   ### Bases
 
   A base in Paddle can be a Keyword list that will be converted to a charlist
   to be passed on to the `:eldap` module. A direct string can also be passed.
 
-  For more informations and examples, see `Paddle.Parsing.construct_dn/2`
+  For more informations and examples, see `Paddle.Filters.construct_dn/2`
   """
 
   use GenServer
   require Logger
 
   alias Paddle.Parsing
+  alias Paddle.Filters
   alias Paddle.Attributes
 
   @type ldap_conn :: :eldap.handle
@@ -84,7 +85,7 @@ defmodule Paddle do
   @type eldap_dn :: charlist
   @type eldap_entry :: {:eldap_entry, eldap_dn, [{charlist, [charlist]}]}
 
-  unless Application.get_env(:paddle, Paddle) do
+  unless Application.get_env(:paddle, __MODULE__) do
     raise """
     Please configure the LDAP in the config files
     See the `Paddle` module documentation.
@@ -104,7 +105,7 @@ defmodule Paddle do
   in `MyApplication.start/2`.
   """
   def start_link() do
-    GenServer.start_link(__MODULE__, :ok, name: Paddle)
+    GenServer.start_link(__MODULE__, :ok, name: __MODULE__)
   end
 
   @spec init(:ok) :: {:ok, ldap_conn}
@@ -126,6 +127,7 @@ defmodule Paddle do
     Logger.info("Connecting to ldap#{if ssl, do: "s"}://#{host}:#{port}")
 
     {:ok, ldap_conn} = :eldap.open([host], ssl: ssl, port: port)
+    :eldap.controlling_process(ldap_conn, self)
     Logger.info("Connected to LDAP")
     {:ok, ldap_conn}
   end
@@ -158,7 +160,7 @@ defmodule Paddle do
 
   def handle_call({:get, filter, kwdn, base}, _from, ldap_conn) do
     dn     = Parsing.construct_dn(kwdn, config(base))
-    filter = Parsing.construct_filter(filter)
+    filter = Filters.construct_filter(filter)
 
     Logger.debug("Getting entries with dn: #{dn} and filter: #{inspect filter}")
 
@@ -170,7 +172,7 @@ defmodule Paddle do
 
   def handle_call({:get_single, filter, kwdn, base}, _from, ldap_conn) do
     dn     = Parsing.construct_dn(kwdn, config(base))
-    filter = Parsing.construct_filter(filter)
+    filter = Filters.construct_filter(filter)
 
     Logger.debug("Getting single entry with dn: #{dn} and filter: #{inspect filter}")
 
@@ -191,7 +193,7 @@ defmodule Paddle do
 
     attributes = attributes
                  |> Enum.filter_map(fn {_key, value} -> value != nil end,
-                                    fn {key, value} -> {'#{key}', list_wrap value} end)
+                                    fn {key, value} -> {'#{key}', Parsing.list_wrap value} end)
 
     status = :eldap.add(ldap_conn, dn, attributes)
 
@@ -208,6 +210,17 @@ defmodule Paddle do
     dn = Parsing.construct_dn(kwdn, config(base))
 
     {:reply, :eldap.delete(ldap_conn, dn), ldap_conn}
+  end
+
+  def handle_call({:modify, kwdn, base, mods}, _from, ldap_conn) do
+    dn = Parsing.construct_dn(kwdn, config(base))
+
+    Logger.info("Modifying entry: #{dn} with mods: #{inspect mods}")
+
+    mods = mods |> Enum.map(&Parsing.mod_convert/1)
+    Logger.debug("Mods translated in :eldap form: #{inspect mods}")
+
+    {:reply, :eldap.modify(ldap_conn, dn, mods), ldap_conn}
   end
 
   @spec check_credentials(charlist | binary, charlist | binary) :: boolean
@@ -315,9 +328,9 @@ defmodule Paddle do
     fields_filter = object
              |> Map.from_struct
              |> Enum.filter(fn {_key, value} -> value != nil end)
-    filter = class_filter(Paddle.Class.object_classes(object))
-             |> merge_filter(Parsing.construct_filter(fields_filter))
-             |> merge_filter(additional_filter)
+    filter = Filters.class_filter(Paddle.Class.object_classes(object))
+             |> Filters.merge_filter(Filters.construct_filter(fields_filter))
+             |> Filters.merge_filter(additional_filter)
     location = Paddle.Class.location(object)
     with {:ok, result} <- GenServer.call(Paddle, {:get, filter, location, :base}) do
       {:ok,
@@ -378,7 +391,7 @@ defmodule Paddle do
   def users(kwdn \\ []) do
     GenServer.call(Paddle,
                    {:get,
-                    class_filter(Keyword.get(kwdn, :filter), ["account", "posixAccount"]),
+                    Filters.class_filter(Keyword.get(kwdn, :filter), ["account", "posixAccount"]),
                     Keyword.get(kwdn, :base),
                     :account_base})
   end
@@ -404,7 +417,7 @@ defmodule Paddle do
   def user(uid) do
     GenServer.call(Paddle,
                    {:get_single,
-                    class_filter(["account", "posixAccount"]),
+                    Filters.class_filter(["account", "posixAccount"]),
                     [uid: uid], :account_base})
   end
 
@@ -429,7 +442,7 @@ defmodule Paddle do
   def groups(kwdn \\ []) do
     GenServer.call(Paddle,
                    {:get,
-                    class_filter(Keyword.get(kwdn, :filter), "posixGroup"),
+                    Filters.class_filter(Keyword.get(kwdn, :filter), "posixGroup"),
                     Keyword.get(kwdn, :base),
                     :group_base})
   end
@@ -449,7 +462,7 @@ defmodule Paddle do
   def group(cn) do
     GenServer.call(Paddle,
                    {:get_single,
-                    class_filter("posixGroup"),
+                    Filters.class_filter("posixGroup"),
                     [cn: cn], :group_base})
   end
 
@@ -540,10 +553,27 @@ defmodule Paddle do
   # == Deleting ==
   # ==============
 
-  def delete(kwdn) when is_list(kwdn) or is_binary(kwdn), do: GenServer.call(Paddle, {:delete, kwdn, :base})
+  def delete(kwdn) when is_list(kwdn) or is_binary(kwdn) do
+    GenServer.call(Paddle, {:delete, kwdn, :base})
+  end
+
   def delete(class_object) when is_map(class_object) do
     with {:ok, dn} <- get_dn(class_object) do
       GenServer.call(Paddle, {:delete, dn, :base})
+    end
+  end
+
+  # ===============
+  # == Modifying ==
+  # ===============
+
+  def modify(kwdn, mods) when is_list(kwdn) or is_binary(kwdn) do
+    GenServer.call(Paddle, {:modify, kwdn, :base, mods})
+  end
+
+  def modify(class_object, mods) when is_map(class_object) do
+    with {:ok, dn} <- get_dn(class_object) do
+      GenServer.call(Paddle, {:modify, dn, :base, mods})
     end
   end
 
@@ -610,41 +640,5 @@ defmodule Paddle do
 
   defp ensure_single_result({:ok, []}), do: {:error, :no_such_object}
   defp ensure_single_result({:ok, [result]}), do: {:ok, result}
-
-  for lhs <- [[], nil], rhs <- [[], nil] do
-    def merge_filter(unquote(lhs), unquote(rhs)), do: :eldap.and([])
-  end
-
-  for null_filter <- [[], nil] do
-    def merge_filter(filter, unquote(null_filter)), do: filter
-    def merge_filter(unquote(null_filter), filter), do: filter
-  end
-
-  def merge_filter({:and, lcond}, {:and, rcond}), do: {:and, lcond ++ rcond}
-  def merge_filter({:and, lcond}, rhs), do: {:and, [Parsing.construct_filter(rhs) | lcond]}
-  def merge_filter(lhs, {:and, rcond}), do: {:and, [Parsing.construct_filter(lhs) | rcond]}
-
-  def merge_filter(lhs, rhs) do
-    :eldap.and([Parsing.construct_filter(lhs), Parsing.construct_filter(rhs)])
-  end
-
-  defp class_filter(classes) when is_list(classes) do
-    classes
-    |> Enum.map(&:eldap.equalityMatch('objectClass', '#{&1}'))
-    |> :eldap.and
-  end
-
-  defp class_filter(class), do: :eldap.equalityMatch('objectClass', '#{class}')
-
-  defp class_filter(nil, class), do: class_filter(class)
-  defp class_filter([], class),  do: class_filter(class)
-
-  defp class_filter(filter, class) do
-    filter = Parsing.construct_filter(filter)
-    :eldap.and([filter, class_filter(class)])
-  end
-
-  defp list_wrap(list) when is_list(list), do: list |> Enum.map(&'#{&1}')
-  defp list_wrap(thing), do: ['#{thing}']
 
 end

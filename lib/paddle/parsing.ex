@@ -25,7 +25,8 @@ defmodule Paddle.Parsing do
 
   Values are escaped.
 
-  Note: using a map is discouraged because the key / values may be reordered.
+  Note: using a map is discouraged because the key / values may be reordered
+  and because they can be mistaken for a class object (see `Paddle.Class`).
   """
   def construct_dn(map, base \\ '')
 
@@ -137,41 +138,33 @@ defmodule Paddle.Parsing do
                  |> Enum.into(%{}))
   end
 
-  # =========================
-  # == Filter manipulation ==
-  # =========================
+  # ===================
+  # == Modifications ==
+  # ===================
 
-  @doc ~S"""
-  Construct a eldap filter from the given keyword list.
-
-  If given an `:eldap` filter (a tuple), it is returned as is.
-
-  If given `nil`, it will return an empty filter (`:eldap.and([])`).
-
-  Examples:
-
-      iex> Paddle.Parsing.construct_filter(:eldap.substrings('uid', initial: 'b'))
-      {:substrings, {:SubstringFilter, 'uid', [initial: 'b']}}
-
-      iex> Paddle.Parsing.construct_filter(nil)
-      {:and, []}
-
-      iex> Paddle.Parsing.construct_filter([])
-      {:and, []}
-
-      iex> Paddle.Parsing.construct_filter(uid: "testuser", ou: "People")
-      {:and,
-       [equalityMatch: {:AttributeValueAssertion, 'uid', 'testuser'},
-        equalityMatch: {:AttributeValueAssertion, 'ou', 'People'}]}
-  """
-  def construct_filter(filter) when is_tuple(filter), do: filter
-  def construct_filter(nil), do: :eldap.and([])
-
-  def construct_filter(kwdn) when is_list(kwdn) do
-    criteria = kwdn
-               |> Enum.map(fn {key, value} -> :eldap.equalityMatch('#{key}', '#{value}') end)
-    :eldap.and(criteria)
+  def mod_convert({:add, {field, value}}) do
+    field = '#{field}'
+    value = list_wrap value
+    :eldap.mod_add(field, value)
   end
+
+  def mod_convert({:delete, field}) do
+    field = '#{field}'
+    :eldap.mod_delete(field, [])
+  end
+
+  def mod_convert({:replace, {field, value}}) do
+    field = '#{field}'
+    value = list_wrap value
+    :eldap.mod_replace(field, value)
+  end
+
+  # ===================
+  # == Miscellaneous ==
+  # ===================
+
+  def list_wrap(list) when is_list(list), do: list |> Enum.map(&'#{&1}')
+  def list_wrap(thing), do: ['#{thing}']
 
   # =======================
   # == Private Utilities ==
