@@ -33,13 +33,13 @@ defmodule Paddle do
 
   ## Usage
 
-  To check a user's credentials, simply do:
+  To check a user's credentials and/or authenticate the connection, simply do:
 
-      Paddle.check_credentials("username", "password")
+      Paddle.authenticate("username", "password")
 
   You can also specify the partial DN like so:
 
-      Paddle.check_credentials([cn: "admin"], "adminpassword")
+      Paddle.authenticate([cn: "admin"], "adminpassword")
 
   Many functions support passing both a base and a filter via a keyword list
   like so:
@@ -242,7 +242,7 @@ defmodule Paddle do
     {:reply, :eldap.modify(ldap_conn, dn, mods), ldap_conn}
   end
 
-  @spec check_credentials(keyword | binary, binary) :: boolean
+  @spec authenticate(keyword | binary, binary) :: boolean
 
   @doc ~S"""
   Check the given credentials.
@@ -253,19 +253,19 @@ defmodule Paddle do
 
   Example:
 
-      iex> Paddle.check_credentials("testuser", "test")
+      iex> Paddle.authenticate("testuser", "test")
       :ok
-      iex> Paddle.check_credentials("testuser", "wrong password")
+      iex> Paddle.authenticate("testuser", "wrong password")
       {:error, :invalidCredentials}
-      iex> Paddle.check_credentials([cn: "admin"], "test")
+      iex> Paddle.authenticate([cn: "admin"], "test")
       :ok
   """
-  def check_credentials(kwdn, password) when is_list(kwdn) do
+  def authenticate(kwdn, password) when is_list(kwdn) do
     dn = Parsing.construct_dn(kwdn, config(:base))
     GenServer.call(Paddle, {:authenticate, dn, String.to_charlist(password)})
   end
 
-  def check_credentials(username, password) do
+  def authenticate(username, password) do
     dn = Parsing.construct_dn([uid: username], config(:account_base))
     GenServer.call(Paddle, {:authenticate, dn, String.to_charlist(password)})
   end
