@@ -146,14 +146,13 @@ defmodule Paddle do
     Logger.info("Stopped LDAP")
   end
 
-  def handle_call({:authenticate, username, password}, _from, ldap_conn) do
-    dn = Parsing.construct_dn([uid: username], config(:account_base))
+  def handle_call({:authenticate, dn, password}, _from, ldap_conn) do
     Logger.debug "Checking credentials with dn: #{dn}"
     status = :eldap.simple_bind(ldap_conn, dn, password)
 
     case status do
       :ok -> {:reply, status, ldap_conn}
-      {:error, :invalidCredentials} -> {:reply, {:error, :invalid_credentials}, ldap_conn}
+      {:error, :invalidCredentials} -> {:reply, status, ldap_conn}
       {:error, :anonymous_auth} -> {:reply, status, ldap_conn}
     end
   end
@@ -195,15 +194,7 @@ defmodule Paddle do
                  |> Enum.filter_map(fn {_key, value} -> value != nil end,
                                     fn {key, value} -> {'#{key}', Parsing.list_wrap value} end)
 
-    status = :eldap.add(ldap_conn, dn, attributes)
-
-    {:reply,
-     case status do
-       :ok -> :ok
-       {:error, :undefinedAttributeType} -> {:error, :undefined_attribute_type}
-       {:error, :objectClassViolation} -> {:error, :object_class_violation}
-     end,
-     ldap_conn}
+    {:reply, :eldap.add(ldap_conn, dn, attributes), ldap_conn}
   end
 
   def handle_call({:delete, kwdn, base}, _from, ldap_conn) do
@@ -223,27 +214,32 @@ defmodule Paddle do
     {:reply, :eldap.modify(ldap_conn, dn, mods), ldap_conn}
   end
 
-  @spec check_credentials(charlist | binary, charlist | binary) :: boolean
+  @spec check_credentials(keyword | binary, binary) :: boolean
 
   @doc ~S"""
   Check the given credentials.
 
-  Because we are using an Erlang library, we must convert the username and
-  password to a list of chars instead of an Elixir string.
+  The user id can be given through a binary, which will expand to
+  `uid=<id>,<group subdn>,<base>`, or through a keyword list if you want to
+  specify the whole DN (still without the base).
 
   Example:
 
       iex> Paddle.check_credentials("testuser", "test")
       :ok
       iex> Paddle.check_credentials("testuser", "wrong password")
-      {:error, :invalid_credentials}
+      {:error, :invalidCredentials}
+      iex> Paddle.check_credentials([cn: "admin"], "test")
+      :ok
   """
-  def check_credentials(username, password) when is_list(username) and is_list(password) do
-    GenServer.call(Paddle, {:authenticate, username, password})
+  def check_credentials(kwdn, password) when is_list(kwdn) do
+    dn = Parsing.construct_dn(kwdn, config(:base))
+    GenServer.call(Paddle, {:authenticate, dn, String.to_charlist(password)})
   end
 
   def check_credentials(username, password) do
-    check_credentials(String.to_charlist(username), String.to_charlist(password))
+    dn = Parsing.construct_dn([uid: username], config(:account_base))
+    GenServer.call(Paddle, {:authenticate, dn, String.to_charlist(password)})
   end
 
   @spec get_dn(struct) :: {:ok, binary} | {:error, :missing_unique_identifier}
@@ -263,6 +259,8 @@ defmodule Paddle do
     id_value = Map.get(object, id_field)
 
     if id_value do
+      id_value = Paddle.Parsing.ldap_escape id_value
+
       {:ok, "#{id_field}=#{id_value},#{subdn}"}
     else
       {:error, :missing_unique_identifier}
@@ -273,7 +271,10 @@ defmodule Paddle do
   # == Getting ==
   # =============
 
-  @spec get(keyword) :: {:ok, [ldap_entry]} | {:error, :no_such_object}
+  @type search_ldap_error :: :noSuchObject | :sizeLimitExceeded |
+  :timeLimitExceeded | :undefinedAttributeType | :insufficientAccessRights
+
+  @spec get(keyword) :: {:ok, [ldap_entry]} | {:error, search_ldap_error}
 
   @doc ~S"""
   Get one or more LDAP entries given a keyword list.
@@ -303,7 +304,7 @@ defmodule Paddle do
          "userPassword" => ["{SSHA}AIzygLSXlArhAMzddUriXQxf7UlkqopP"]}]}
 
       iex> Paddle.get(base: [uid: "nothing"])
-      {:error, :no_such_object}
+      {:error, :noSuchObject}
 
       iex> Paddle.get(filter: [uid: "testuser"], base: [ou: "People"])
       {:ok,
@@ -344,7 +345,7 @@ defmodule Paddle do
     result
   end
 
-  @spec get_single(keyword) :: {:ok, ldap_entry} | {:error, :no_such_object}
+  @spec get_single(keyword) :: {:ok, ldap_entry} | {:error, search_ldap_error}
 
   @doc ~S"""
   Get a single LDAP entry given a keyword list.
@@ -357,7 +358,7 @@ defmodule Paddle do
         "objectClass" => ["top", "organizationalUnit"], "ou" => ["People"]}}
 
       iex> Paddle.get_single(filter: [uid: "nothing"])
-      {:error, :no_such_object}
+      {:error, :noSuchObject}
   """
   def get_single(kwdn) do
     GenServer.call(Paddle,
@@ -367,7 +368,7 @@ defmodule Paddle do
                     :base})
   end
 
-  @spec users(keyword) :: {:ok, [ldap_entry]} | {:error, :no_such_object}
+  @spec users(keyword) :: {:ok, [ldap_entry]} | {:error, search_ldap_error}
 
   @doc ~S"""
   Get all user entries.
@@ -396,7 +397,7 @@ defmodule Paddle do
                     :account_base})
   end
 
-  @spec user(binary | charlist) :: {:ok, ldap_entry} | {:error, :no_such_object}
+  @spec user(binary | charlist) :: {:ok, ldap_entry} | {:error, search_ldap_error}
 
   @doc ~S"""
   Get a user entry given a uid.
@@ -421,7 +422,7 @@ defmodule Paddle do
                     [uid: uid], :account_base})
   end
 
-  @spec groups() :: {:ok, [ldap_entry]} | {:error, :no_such_object}
+  @spec groups() :: {:ok, [ldap_entry]} | {:error, search_ldap_error}
 
   @doc ~S"""
   Get all group entries.
@@ -447,7 +448,7 @@ defmodule Paddle do
                     :group_base})
   end
 
-  @spec group(binary | charlist) :: {:ok, ldap_entry} | {:error, :no_such_object}
+  @spec group(binary | charlist) :: {:ok, ldap_entry} | {:error, search_ldap_error}
 
   @doc ~S"""
   Get a group entry given the group name (cn).
@@ -466,7 +467,7 @@ defmodule Paddle do
                     [cn: cn], :group_base})
   end
 
-  @spec users_from_group(binary | charlist) :: {:ok, [ldap_entry]} | {:error, :no_such_object}
+  @spec users_from_group(binary | charlist) :: {:ok, [ldap_entry]} | {:error, search_ldap_error}
 
   @doc ~S"""
   Get all user entries belonging to a given group (specified by cn)
@@ -515,9 +516,11 @@ defmodule Paddle do
   # ============
 
   @type attributes :: keyword | %{required(binary) => binary} | [{binary, binary}]
-  @type add_ldap_error :: {:error, :undefined_attribute_type} | {:error, :object_class_violation}
+  @type add_ldap_error :: :undefinedAttributeType | :objectClassViolation |
+  :invalidAttributeSyntax | :noSuchObject | :insufficientAccessRights |
+  :entryAlreadyExists
 
-  @spec add(keyword, attributes) :: :ok | add_ldap_error
+  @spec add(keyword, attributes) :: :ok | {:error, add_ldap_error}
 
   @doc ~S"""
   Add an entry to the LDAP.
@@ -553,6 +556,11 @@ defmodule Paddle do
   # == Deleting ==
   # ==============
 
+  @type delete_ldap_error :: :noSuchObject | :notAllowedOnNonLeaf |
+  :insufficientAccessRights
+
+  @spec delete(Paddle.Class.t | keyword) :: :ok | {:error, delete_ldap_error}
+
   def delete(kwdn) when is_list(kwdn) or is_binary(kwdn) do
     GenServer.call(Paddle, {:delete, kwdn, :base})
   end
@@ -567,6 +575,19 @@ defmodule Paddle do
   # == Modifying ==
   # ===============
 
+  @type mod :: {:add, {binary, binary | [binary]}} | {:delete, binary} |
+  {:replace, {binary, binary | [binary]}}
+
+  @type modify_ldap_error :: :noSuchObject | :undefinedAttributeType |
+  :namingViolation | :attributeOrValueExists | :invalidAttributeSyntax |
+  :notAllowedOnRDN | :objectClassViolation | :objectClassModsProhibited |
+  :insufficientAccessRights
+
+  @spec modify(Paddle.Class.t | keyword, mod) :: :ok | {:error, modify_ldap_error}
+
+  @doc ~S"""
+  TODO
+  """
   def modify(kwdn, mods) when is_list(kwdn) or is_binary(kwdn) do
     GenServer.call(Paddle, {:modify, kwdn, :base, mods})
   end
@@ -604,16 +625,16 @@ defmodule Paddle do
 
   @spec clean_eldap_search_results({:ok, {:eldap_search_result, [eldap_entry]}}
                                    | {:error, atom})
-  :: {:ok, [ldap_entry]} | {:error, :no_such_object}
+  :: {:ok, [ldap_entry]} | {:error, :noSuchObject}
 
   defp clean_eldap_search_results({:error, error}) do
     case error do
-      :noSuchObject -> {:error, :no_such_object}
+      :noSuchObject -> {:error, :noSuchObject}
     end
   end
 
   defp clean_eldap_search_results({:ok, {:eldap_search_result, [], []}}) do
-    {:error, :no_such_object}
+    {:error, :noSuchObject}
   end
 
   defp clean_eldap_search_results({:ok, {:eldap_search_result, entries, []}}) do
@@ -630,15 +651,15 @@ defmodule Paddle do
   end
 
   @spec ensure_single_result({:ok, [ldap_entry]} | {:error, atom})
-  :: {:ok, ldap_entry} | {:error, :no_such_object}
+  :: {:ok, ldap_entry} | {:error, :noSuchObject}
 
   defp ensure_single_result({:error, error}) do
     case error do
-      :no_such_object -> {:error, :no_such_object}
+      :noSuchObject -> {:error, :noSuchObject}
     end
   end
 
-  defp ensure_single_result({:ok, []}), do: {:error, :no_such_object}
+  defp ensure_single_result({:ok, []}), do: {:error, :noSuchObject}
   defp ensure_single_result({:ok, [result]}), do: {:ok, result}
 
 end

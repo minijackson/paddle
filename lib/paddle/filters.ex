@@ -12,19 +12,19 @@ defmodule Paddle.Filters do
 
   Examples:
 
-      iex> Paddle.Parsing.construct_filter(:eldap.substrings('uid', initial: 'b'))
+      iex> Paddle.Filters.construct_filter(:eldap.substrings('uid', initial: 'b'))
       {:substrings, {:SubstringFilter, 'uid', [initial: 'b']}}
 
-      iex> Paddle.Parsing.construct_filter(nil)
+      iex> Paddle.Filters.construct_filter(nil)
       {:and, []}
 
-      iex> Paddle.Parsing.construct_filter([])
+      iex> Paddle.Filters.construct_filter([])
       {:and, []}
 
-      iex> Paddle.Parsing.construct_filter(uid: "testuser", ou: "People")
+      iex> Paddle.Filters.construct_filter(uid: "testuser", cn: "Test User")
       {:and,
        [equalityMatch: {:AttributeValueAssertion, 'uid', 'testuser'},
-        equalityMatch: {:AttributeValueAssertion, 'ou', 'People'}]}
+        equalityMatch: {:AttributeValueAssertion, 'cn', 'Test User'}]}
   """
   def construct_filter(filter) when is_tuple(filter), do: filter
   def construct_filter(nil), do: :eldap.and([])
