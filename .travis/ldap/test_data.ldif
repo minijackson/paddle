@@ -33,4 +33,4 @@ dn: cn=adm,ou=Group,dc=test,dc=com
 cn: adm
 objectClass: top
 objectClass: posixGroup
-gidNumber: 2
+gidNumber: 3

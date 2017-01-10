@@ -25,16 +25,19 @@ defmodule Paddle.Parsing do
 
   Values are escaped.
 
-  Note: using a map is discouraged because the key / values may be reordered
-  and because they can be mistaken for a class object (see `Paddle.Class`).
+  Note: using a map is highly discouraged because the key / values may be
+  reordered and because they can be mistaken for a class object (see
+  `Paddle.Class`).
   """
   def construct_dn(map, base \\ '')
 
   def construct_dn([], base) when is_list(base), do: base
   def construct_dn([], base), do: String.to_charlist(base)
 
-  def construct_dn(subdn, base) when is_binary(subdn) and is_list(base), do: String.to_charlist(subdn) ++ ',' ++ base
-  def construct_dn(subdn, base) when is_binary(subdn), do: String.to_charlist(subdn) ++ ',' ++ String.to_charlist(base)
+  def construct_dn(subdn, base) when is_binary(subdn) and is_list(base), do:
+    String.to_charlist(subdn) ++ ',' ++ base
+  def construct_dn(subdn, base) when is_binary(subdn), do:
+    String.to_charlist(subdn) ++ ',' ++ String.to_charlist(base)
 
   def construct_dn(nil, base) when is_list(base), do: base
   def construct_dn(nil, base), do: String.to_charlist(base)
@@ -124,7 +127,7 @@ defmodule Paddle.Parsing do
   @spec clean_entry(Paddle.eldap_entry) :: Paddle.ldap_entry
 
   @doc ~S"""
-  Get a binary map representation of several eldap entries.
+  Get a binary map representation of a single eldap entry.
 
   Example:
 
@@ -141,6 +144,27 @@ defmodule Paddle.Parsing do
   # ===================
   # == Modifications ==
   # ===================
+
+  @spec mod_convert(Paddle.mod) :: tuple
+
+  @doc ~S"""
+  Convert a user-friendly modify operation to an eldap operation.
+
+  Examples:
+
+      iex> Paddle.Parsing.mod_convert {:add, {"description", "This is a description"}}
+      {:ModifyRequest_changes_SEQOF, :add,
+       {:PartialAttribute, 'description', ['This is a description']}}
+
+      iex> Paddle.Parsing.mod_convert {:delete, "description"}
+      {:ModifyRequest_changes_SEQOF, :delete,
+       {:PartialAttribute, 'description', []}}
+
+      iex> Paddle.Parsing.mod_convert {:replace, {"description", "This is a description"}}
+      {:ModifyRequest_changes_SEQOF, :replace,
+       {:PartialAttribute, 'description', ['This is a description']}}
+  """
+  def mod_convert(operation)
 
   def mod_convert({:add, {field, value}}) do
     field = '#{field}'
@@ -163,6 +187,20 @@ defmodule Paddle.Parsing do
   # == Miscellaneous ==
   # ===================
 
+  @spec list_wrap(term) :: [charlist]
+
+  @doc ~S"""
+  Wrap things in lists and convert binaries / atoms to charlists.
+
+      iex> Paddle.Parsing.list_wrap "hello"
+      ['hello']
+
+      iex> Paddle.Parsing.list_wrap :hello
+      ['hello']
+
+      iex> Paddle.Parsing.list_wrap ["hello", "world"]
+      ['hello', 'world']
+  """
   def list_wrap(list) when is_list(list), do: list |> Enum.map(&'#{&1}')
   def list_wrap(thing), do: ['#{thing}']
 

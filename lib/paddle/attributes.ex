@@ -3,8 +3,20 @@ defmodule Paddle.Attributes do
   Module used internally by Paddle to manipulate / convert LDAP attributes.
   """
 
+  @spec get(Paddle.Class.t) :: {:ok, map} | {:error, :missing_required_attributes, [atom]}
+
   @doc ~S"""
-  
+  Get the given and the generated attributes of a given class object.
+
+  Examples:
+
+      iex> Paddle.Attributes.get(%Paddle.PosixGroup{})
+      {:error, :missing_required_attributes, [:cn]}
+
+      iex> Paddle.Attributes.get(%Paddle.PosixGroup{cn: "myGroup"})
+      {:ok,
+       %{cn: "myGroup", description: nil, gidNumber: 4, memberUid: nil,
+         objectClass: ["posixGroup"], userPassword: nil}}
   """
   def get(class_object) do
     given_attributes = Map.from_struct(class_object)

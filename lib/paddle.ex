@@ -37,24 +37,52 @@ defmodule Paddle do
 
       Paddle.check_credentials("username", "password")
 
+  You can also specify the partial DN like so:
+
+      Paddle.check_credentials([cn: "admin"], "adminpassword")
+
   Many functions support passing both a base and a filter via a keyword list
   like so:
 
       Paddle.get(filter: [uid: "testuser"], base: [ou: "People"])
 
+  But you can also use structs which implements the `Paddle.Class` protocol
+  (called [class objects](#module-class-objects)). Some are already defined:
+
+      Paddle.get %Paddle.PosixAccount{uid: "user"}
+
+  The previous example will return every accounts which are in a given subDN
+  (defined in the `Paddle.Class` protocol), which have the right objectClass
+  (also defined in the same protocol), and have an uid of "user".
+
+  You can also specify an additional [filter](#module-filters) as second
+  argument.
+
   You are also provided with some "user" functions that will automatically get
-  the information from the right "directory" and check that the entry have the
+  the information from the right subDN and check that the entry have the
   right objectClass, see [Configuration](#module-configuration).
 
   Example:
 
       Paddle.users(filter: [givenName: "User"])
 
-  ### Filters
+  ## Class objects
+
+  A class object is simply a struct implementing the `Paddle.Class` protocol.
+  Some "classes" are already defined and implemented (see
+  `Paddle.PosixAccount`, and `Paddle.PosixGroup`)
+
+  For more informations, see the `Paddle.Class` module documentation.
+
+  ## Filters
 
   A filter in Paddle is a Keyword list and the atom corresponding to the key
   must have a value strictly equal to, well the given value. When multiple
   keywords are provided, the result must match all criteria.
+
+  Example:
+
+      [uid: "user", cn: "User", homeDirectory: "/home/user"]
 
   If you are missing some filtering capabilities, you can always pass as
   argument an `:eldap` filter like so:
@@ -63,7 +91,7 @@ defmodule Paddle do
 
   For more informations and examples, see `Paddle.Filters.construct_filter/1`
 
-  ### Bases
+  ## Bases
 
   A base in Paddle can be a Keyword list that will be converted to a charlist
   to be passed on to the `:eldap` module. A direct string can also be passed.
@@ -127,7 +155,7 @@ defmodule Paddle do
     Logger.info("Connecting to ldap#{if ssl, do: "s"}://#{host}:#{port}")
 
     {:ok, ldap_conn} = :eldap.open([host], ssl: ssl, port: port)
-    :eldap.controlling_process(ldap_conn, self)
+    :eldap.controlling_process(ldap_conn, self())
     Logger.info("Connected to LDAP")
     {:ok, ldap_conn}
   end
@@ -206,7 +234,7 @@ defmodule Paddle do
   def handle_call({:modify, kwdn, base, mods}, _from, ldap_conn) do
     dn = Parsing.construct_dn(kwdn, config(base))
 
-    Logger.info("Modifying entry: #{dn} with mods: #{inspect mods}")
+    Logger.info("Modifying entry: \"#{dn}\" with mods: #{inspect mods}")
 
     mods = mods |> Enum.map(&Parsing.mod_convert/1)
     Logger.debug("Mods translated in :eldap form: #{inspect mods}")
@@ -317,7 +345,7 @@ defmodule Paddle do
          "uid" => ["testuser"], "uidNumber" => ["500"],
          "userPassword" => ["{SSHA}AIzygLSXlArhAMzddUriXQxf7UlkqopP"]}]}
   """
-  def get(kwdn) do
+  def get(kwdn) when is_list(kwdn) do
     GenServer.call(Paddle,
                    {:get,
                     Keyword.get(kwdn, :filter),
@@ -325,12 +353,40 @@ defmodule Paddle do
                     :base})
   end
 
-  def get_all(object, additional_filter \\ []) do
+  @spec get(Paddle.Class.t, [tuple]) :: {:ok, [Paddle.Class.t]} | {:error, search_ldap_error}
+
+  @doc ~S"""
+  Get an entry in the LDAP given a class object. You can specify an optional
+  additional filter as second argument.
+
+  Example:
+
+      iex> Paddle.get(%Paddle.PosixAccount{})
+      {:ok,
+       [%Paddle.PosixAccount{cn: ["Test User"], description: nil,
+         gecos: ["Test User,,,,"], gidNumber: ["120"],
+         homeDirectory: ["/home/testuser"], host: nil, l: nil,
+         loginShell: ["/bin/bash"], o: nil,
+         ou: nil, seeAlso: nil, uid: ["testuser"],
+         uidNumber: ["500"],
+         userPassword: ["{SSHA}AIzygLSXlArhAMzddUriXQxf7UlkqopP"]}]}
+
+      iex> Paddle.get(%Paddle.PosixGroup{cn: "users"})
+      {:ok,
+       [%Paddle.PosixGroup{cn: ["users"], description: nil, gidNumber: ["2"],
+         memberUid: ["testuser"], userPassword: nil}]}
+
+      iex> Paddle.get(%Paddle.PosixGroup{}, :eldap.substrings('cn', initial: 'a'))
+      {:ok,
+       [%Paddle.PosixGroup{cn: ["adm"], description: nil, gidNumber: ["3"],
+         memberUid: nil, userPassword: nil}]}
+  """
+  def get(object, additional_filter \\ []) do
     fields_filter = object
              |> Map.from_struct
              |> Enum.filter(fn {_key, value} -> value != nil end)
     filter = Filters.class_filter(Paddle.Class.object_classes(object))
-             |> Filters.merge_filter(Filters.construct_filter(fields_filter))
+             |> Filters.merge_filter(fields_filter)
              |> Filters.merge_filter(additional_filter)
     location = Paddle.Class.location(object)
     with {:ok, result} <- GenServer.call(Paddle, {:get, filter, location, :base}) do
@@ -340,8 +396,23 @@ defmodule Paddle do
     end
   end
 
-  def get_all!(object, additional_filter \\ []) do
-    {:ok, result} = get_all(object, additional_filter)
+  @spec get!(keyword) :: [ldap_entry]
+
+  @doc ~S"""
+  Same as `get/1` but throws in case of an error.
+  """
+  def get!(kwdn) when is_list(kwdn) do
+    {:ok, result} = get(kwdn)
+    result
+  end
+
+  @spec get!(Paddle.Class.t, [tuple]) :: [Paddle.Class.t]
+
+  @doc ~S"""
+  Same as `get/2` but throws in case of an error.
+  """
+  def get!(object, additional_filter \\ []) do
+    {:ok, result} = get(object, additional_filter)
     result
   end
 
@@ -368,149 +439,6 @@ defmodule Paddle do
                     :base})
   end
 
-  @spec users(keyword) :: {:ok, [ldap_entry]} | {:error, search_ldap_error}
-
-  @doc ~S"""
-  Get all user entries.
-
-  You can give an additional filter via the `filter:` keyword, but you are not
-  allowed to specify the base.
-
-  Example:
-
-      iex> Paddle.users()
-      {:ok,
-       [%{"cn" => ["Test User"],
-         "dn" => "uid=testuser,ou=People,dc=test,dc=com",
-         "gecos" => ["Test User,,,,"], "gidNumber" => ["120"],
-         "homeDirectory" => ["/home/testuser"],
-         "loginShell" => ["/bin/bash"],
-         "objectClass" => ["account", "posixAccount", "top"],
-         "uid" => ["testuser"], "uidNumber" => ["500"],
-         "userPassword" => ["{SSHA}AIzygLSXlArhAMzddUriXQxf7UlkqopP"]}]}
-  """
-  def users(kwdn \\ []) do
-    GenServer.call(Paddle,
-                   {:get,
-                    Filters.class_filter(Keyword.get(kwdn, :filter), ["account", "posixAccount"]),
-                    Keyword.get(kwdn, :base),
-                    :account_base})
-  end
-
-  @spec user(binary | charlist) :: {:ok, ldap_entry} | {:error, search_ldap_error}
-
-  @doc ~S"""
-  Get a user entry given a uid.
-
-  Example:
-
-      iex> Paddle.user("testuser")
-      {:ok,
-       %{"cn" => ["Test User"],
-        "dn" => "uid=testuser,ou=People,dc=test,dc=com",
-        "gecos" => ["Test User,,,,"], "gidNumber" => ["120"],
-        "homeDirectory" => ["/home/testuser"],
-        "loginShell" => ["/bin/bash"],
-        "objectClass" => ["account", "posixAccount", "top"],
-        "uid" => ["testuser"], "uidNumber" => ["500"],
-        "userPassword" => ["{SSHA}AIzygLSXlArhAMzddUriXQxf7UlkqopP"]}}
-  """
-  def user(uid) do
-    GenServer.call(Paddle,
-                   {:get_single,
-                    Filters.class_filter(["account", "posixAccount"]),
-                    [uid: uid], :account_base})
-  end
-
-  @spec groups() :: {:ok, [ldap_entry]} | {:error, search_ldap_error}
-
-  @doc ~S"""
-  Get all group entries.
-
-  You can give an additional filter via the `filter:` keyword, but you are not
-  allowed to specify the base.
-
-  Example:
-
-      iex> Paddle.groups()
-      {:ok,
-       [%{"cn" => ["users"], "dn" => "cn=users,ou=Group,dc=test,dc=com",
-         "gidNumber" => ["2"], "memberUid" => ["testuser"],
-         "objectClass" => ["top", "posixGroup"]},
-        %{"cn" => ["adm"], "dn" => "cn=adm,ou=Group,dc=test,dc=com",
-         "gidNumber" => ["2"], "objectClass" => ["top", "posixGroup"]}]}
-  """
-  def groups(kwdn \\ []) do
-    GenServer.call(Paddle,
-                   {:get,
-                    Filters.class_filter(Keyword.get(kwdn, :filter), "posixGroup"),
-                    Keyword.get(kwdn, :base),
-                    :group_base})
-  end
-
-  @spec group(binary | charlist) :: {:ok, ldap_entry} | {:error, search_ldap_error}
-
-  @doc ~S"""
-  Get a group entry given the group name (cn).
-
-  Example:
-
-      iex> Paddle.group("adm")
-      {:ok,
-       %{"cn" => ["adm"], "dn" => "cn=adm,ou=Group,dc=test,dc=com",
-        "gidNumber" => ["2"], "objectClass" => ["top", "posixGroup"]}}
-  """
-  def group(cn) do
-    GenServer.call(Paddle,
-                   {:get_single,
-                    Filters.class_filter("posixGroup"),
-                    [cn: cn], :group_base})
-  end
-
-  @spec users_from_group(binary | charlist) :: {:ok, [ldap_entry]} | {:error, search_ldap_error}
-
-  @doc ~S"""
-  Get all user entries belonging to a given group (specified by cn)
-
-  Example:
-
-      iex> Paddle.users_from_group("users")
-      {:ok,
-       [%{"cn" => ["Test User"],
-         "dn" => "uid=testuser,ou=People,dc=test,dc=com",
-         "gecos" => ["Test User,,,,"], "gidNumber" => ["120"],
-         "homeDirectory" => ["/home/testuser"],
-         "loginShell" => ["/bin/bash"],
-         "objectClass" => ["account", "posixAccount", "top"],
-         "uid" => ["testuser"], "uidNumber" => ["500"],
-         "userPassword" => ["{SSHA}AIzygLSXlArhAMzddUriXQxf7UlkqopP"]}]}
-  """
-  def users_from_group(cn) do
-    {:ok, entry} = group(cn)
-
-    filter = entry
-             |> Map.fetch!("memberUid")
-             |> Enum.map(fn uid -> :eldap.equalityMatch('uid', String.to_charlist(uid)) end)
-             |> :eldap.or
-    users(filter: filter)
-  end
-
-  @spec groups_of_user(binary | charlist) :: {:ok, [ldap_entry]} | {:error, :no_such_object}
-
-  @doc ~S"""
-  Get all group entries which a given user belongs to.
-
-  Example:
-
-      iex> Paddle.groups_of_user("testuser")
-      {:ok,
-       [%{"cn" => ["users"], "dn" => "cn=users,ou=Group,dc=test,dc=com",
-         "gidNumber" => ["2"], "memberUid" => ["testuser"],
-         "objectClass" => ["top", "posixGroup"]}]}
-  """
-  def groups_of_user(uid) when is_list(uid), do: groups(filter: :eldap.equalityMatch('memberUid', uid))
-  def groups_of_user(uid), do: String.to_charlist(uid) |> groups_of_user
-
   # ============
   # == Adding ==
   # ============
@@ -523,7 +451,8 @@ defmodule Paddle do
   @spec add(keyword, attributes) :: :ok | {:error, add_ldap_error}
 
   @doc ~S"""
-  Add an entry to the LDAP.
+  Add an entry to the LDAP given a DN and a list of
+  attributes.
 
   The first argument is the DN given as a string or keyword list as usual.
   The second argument is the list of attributes in the new entry as a keyword
@@ -539,12 +468,20 @@ defmodule Paddle do
   Please note that due to the limitation of char lists you cannot pass directly
   a char list as an attribute value. But, you can wrap it in an array like
   this: `homeDirectory: ['/home/user']`
-
-  Note that even if the above example is about adding a new user, you should
-  probably use `add_user/2`.
   """
-  def add(kwdn, attributes), do: GenServer.call(Paddle, {:add, kwdn, attributes, :base})
+  def add(kwdn, attributes), do:
+    GenServer.call(Paddle, {:add, kwdn, attributes, :base})
 
+  @spec add(Paddle.Class.t) :: :ok | {:error, :missing_unique_identifier} |
+  {:error, :missing_req_attributes, [atom]} | {:error, add_ldap_error}
+
+  @doc ~S"""
+  Add an entry to the LDAP given a class object.
+
+  Example:
+
+      Paddle.add(%Paddle.PosixAccount{uid: "myUser", cn: "My User", gidNumber: "501", homeDirectory: "/home/myUser"})
+  """
   def add(class_object) do
     with {:ok, dn} <- get_dn(class_object),
          {:ok, attributes} <- Attributes.get(class_object) do
@@ -561,6 +498,18 @@ defmodule Paddle do
 
   @spec delete(Paddle.Class.t | keyword) :: :ok | {:error, delete_ldap_error}
 
+  @doc ~S"""
+  Delete a LDAP entry given a DN or a class object.
+
+  Examples:
+
+      Paddle.delete("uid=testuser,ou=People")
+      Paddle.delete([uid: "testuser", ou: "People"])
+      Paddle.delete(%Paddle.PosixAccount{uid: "testuser"})
+
+  The three examples above do exactly the same thing (provided that the
+  `Paddle.PosixAccount` is configured appropriately).
+  """
   def delete(kwdn) when is_list(kwdn) or is_binary(kwdn) do
     GenServer.call(Paddle, {:delete, kwdn, :base})
   end
@@ -575,8 +524,8 @@ defmodule Paddle do
   # == Modifying ==
   # ===============
 
-  @type mod :: {:add, {binary, binary | [binary]}} | {:delete, binary} |
-  {:replace, {binary, binary | [binary]}}
+  @type mod :: {:add, {binary | atom, binary | [binary]}} | {:delete, binary} |
+  {:replace, {binary | atom, binary | [binary]}}
 
   @type modify_ldap_error :: :noSuchObject | :undefinedAttributeType |
   :namingViolation | :attributeOrValueExists | :invalidAttributeSyntax |
@@ -586,7 +535,23 @@ defmodule Paddle do
   @spec modify(Paddle.Class.t | keyword, mod) :: :ok | {:error, modify_ldap_error}
 
   @doc ~S"""
-  TODO
+  Modify an LDAP entry given a DN or a class object and a list of
+  modifications.
+
+  A modification is specified like so:
+
+      {action, {parameters...}}
+
+  For example, adding a "description" field:
+
+      {:add, {"description", "This is a description"}}
+
+  This allows you to do things like this:
+
+      Paddle.modify([uid: "testuser", ou: "People"],
+                    add: {"description", "This is a description"},
+                    delete: "gecos",
+                    replace: {"o", ["Club *Nix", "Linux Foundation"]})
   """
   def modify(kwdn, mods) when is_list(kwdn) or is_binary(kwdn) do
     GenServer.call(Paddle, {:modify, kwdn, :base, mods})
@@ -608,7 +573,7 @@ defmodule Paddle do
 
   @spec config(atom) :: any
 
-  defp config(:host),          do: Keyword.get(config, :host)             |> String.to_charlist
+  defp config(:host),          do: Keyword.get(config(), :host)           |> String.to_charlist
   defp config(:ssl),           do: config(:ssl, false)
   defp config(:port),          do: config(:port, 389)
   defp config(:base),          do: config(:base, "")                      |> String.to_charlist
@@ -621,7 +586,7 @@ defmodule Paddle do
 
   @spec config(atom, any) :: any
 
-  defp config(key, default), do: Keyword.get(config, key, default)
+  defp config(key, default), do: Keyword.get(config(), key, default)
 
   @spec clean_eldap_search_results({:ok, {:eldap_search_result, [eldap_entry]}}
                                    | {:error, atom})
