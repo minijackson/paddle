@@ -9,6 +9,24 @@ A library simplifying LDAP usage in Elixir projects.
 
 [Documentation](https://hexdocs.pm/paddle/Paddle.html)
 
+## Why another LDAP library?
+
+If you want to communicate with an LDAP server in Elixir, you probably know
+that there are other libraries out there. However, I didn't find one that
+suited me:
+
+- The [`:eldap`](http://erlang.org/doc/man/eldap.html) library is great, but
+  very low-level, with no high-level features.
+
+- [EctoLdap](https://github.com/jeffweiss/ecto_ldap) is very interesting, but I
+  needed the add / modify / delete operations (in fact, I even wanted to do an
+  Ecto adapter at first).
+
+- [Exldap](https://github.com/jmerriweather/exldap) and
+  [LDAPEx](https://github.com/OvermindDL1/ldap_ex) are both a translation of
+  the LDAP `:eldap` in Elixir, which is nice, but are still missing some
+  higher-level functionalities.
+
 ## Usage
 
 Once installed and configured, it allows you to quickly authenticate users:
