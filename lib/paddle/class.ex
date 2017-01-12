@@ -106,11 +106,9 @@ end
 
 defimpl Paddle.Class, for: Paddle.PosixAccount do
   def unique_identifier(_), do: :uid
-  # TODO(minijackson): use config?
   def object_classes(_), do: ["posixAccount", "account"]
   def required_attributes(_), do: [:uid, :cn, :uidNumber, :gidNumber, :homeDirectory]
-  # TODO(minijackson): use config.
-  def location(_), do: "ou=People"
+  def location(_), do: Paddle.config(:account_subdn) |> List.to_string
   def generators(_), do: [uidNumber: &Paddle.PosixAccount.get_next_uid/1]
 end
 
@@ -139,10 +137,8 @@ end
 
 defimpl Paddle.Class, for: Paddle.PosixGroup do
   def unique_identifier(_), do: :cn
-  # TODO(minijackson): use config?
   def object_classes(_), do: ["posixGroup"]
   def required_attributes(_), do: [:cn, :gidNumber]
-  # TODO(minijackson): use config.
-  def location(_), do: "ou=Group"
+  def location(_), do: Paddle.config(:group_subdn) |> List.to_string
   def generators(_), do: [gidNumber: &Paddle.PosixGroup.get_next_gid/1]
 end

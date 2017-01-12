@@ -150,8 +150,6 @@ defmodule Paddle do
     host = config(:host)
     port = config(:port)
 
-    if ssl, do: Application.ensure_all_started(:ssl)
-
     Logger.info("Connecting to ldap#{if ssl, do: "s"}://#{host}:#{port}")
 
     {:ok, ldap_conn} = :eldap.open([host], ssl: ssl, port: port)
@@ -569,24 +567,34 @@ defmodule Paddle do
 
   @spec config :: keyword
 
-  defp config, do: Application.get_env(:paddle, Paddle)
+  @doc ~S"""
+  Get the environment whole configuration of the Paddle application.
+  """
+  def config, do: Application.get_env(:paddle, Paddle)
 
   @spec config(atom) :: any
 
-  defp config(:host),          do: Keyword.get(config(), :host)           |> String.to_charlist
-  defp config(:ssl),           do: config(:ssl, false)
-  defp config(:port),          do: config(:port, 389)
-  defp config(:base),          do: config(:base, "")                      |> String.to_charlist
-  defp config(:account_base),  do: config(:account_subdn) ++ ',' ++ config(:base)
-  defp config(:group_base),    do: config(:group_subdn)   ++ ',' ++ config(:base)
-  defp config(:account_subdn), do: config(:account_subdn, "ou=People")    |> String.to_charlist
-  defp config(:group_subdn),   do: config(:group_subdn, "ou=Group")       |> String.to_charlist
-  defp config(:account_class), do: config(:account_class, "posixAccount") |> String.to_charlist
-  defp config(:group_class),   do: config(:group_class, "posixGroup")     |> String.to_charlist
+  @doc ~S"""
+  Get the environment configuration of the Paddle application under a
+  certain key.
+  """
+  def config(:host),          do: Keyword.get(config(), :host)           |> String.to_charlist
+  def config(:ssl),           do: config(:ssl, false)
+  def config(:port),          do: config(:port, 389)
+  def config(:base),          do: config(:base, "")                      |> String.to_charlist
+  def config(:account_base),  do: config(:account_subdn) ++ ',' ++ config(:base)
+  def config(:group_base),    do: config(:group_subdn)   ++ ',' ++ config(:base)
+  def config(:account_subdn), do: config(:account_subdn, "ou=People")    |> String.to_charlist
+  def config(:group_subdn),   do: config(:group_subdn, "ou=Group")       |> String.to_charlist
+  def config(:account_class), do: config(:account_class, "posixAccount") |> String.to_charlist
+  def config(:group_class),   do: config(:group_class, "posixGroup")     |> String.to_charlist
 
   @spec config(atom, any) :: any
 
-  defp config(key, default), do: Keyword.get(config(), key, default)
+  @doc ~S"""
+  Same as `config/1` but allows you to specify a default value.
+  """
+  def config(key, default), do: Keyword.get(config(), key, default)
 
   @spec clean_eldap_search_results({:ok, {:eldap_search_result, [eldap_entry]}}
                                    | {:error, atom})
