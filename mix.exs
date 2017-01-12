@@ -42,7 +42,7 @@ defmodule Paddle.Mixfile do
   defp package() do
     [name: :paddle,
      maintainers: ["Rémi Nicole"],
-     licenses: "MIT",
+     licenses: ["MIT"],
      links: %{"GitHub" => "https://github.com/ClubNix/paddle",
               "Docs" => "https://hexdocs.pm/paddle/Paddle.html"}]
   end
