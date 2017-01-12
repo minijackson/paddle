@@ -4,10 +4,12 @@ defmodule Paddle.Mixfile do
   def project do
     [app: :paddle,
      version: "0.1.0",
+     description: "A library simplifying LDAP usage",
      elixir: "~> 1.3",
      build_embedded: Mix.env == :prod,
      start_permanent: Mix.env == :prod,
      deps: deps(),
+     package: package(),
      source_url: "https://github.com/ClubNix/paddle",
      homepage_url: "https://github.com/ClubNix/paddle",
      docs: [extras: ["README.md"]]]
@@ -36,4 +38,15 @@ defmodule Paddle.Mixfile do
      {:credo, "~> 0.4", only: [:dev, :test]},
      {:inch_ex, "~> 0.5", only: [:dev, :test]}]
   end
+
+  defp package() do
+    [name: :paddle,
+     files: ["lib", "priv", "mix.exs", "README*", "readme*", "LICENSE*",
+             "license*"],
+     maintainers: ["Rémi Nicole"],
+     licenses: "MIT",
+     links: %{"GitHub" => "https://github.com/ClubNix/paddle",
+              "Docs" => "https://hexdocs.pm/paddle/Paddle.html"}]
+  end
+
 end
