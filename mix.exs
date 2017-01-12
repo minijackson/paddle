@@ -41,7 +41,6 @@ defmodule Paddle.Mixfile do
 
   defp package() do
     [name: :paddle,
-     files: ["lib", "mix.exs", "README*", "LICENSE*"],
      maintainers: ["Rémi Nicole"],
      licenses: "MIT",
      links: %{"GitHub" => "https://github.com/ClubNix/paddle",
