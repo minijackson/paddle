@@ -1,5 +1,6 @@
 # Paddle
 
+[![hex.pm version](https://img.shields.io/hexpm/v/paddle.svg)](https://hex.pm/packages/paddle)
 [![Build Status](https://travis-ci.org/ClubNix/paddle.svg?branch=master)](https://travis-ci.org/ClubNix/paddle)
 [![Deps Status](https://beta.hexfaktor.org/badge/all/github/ClubNix/paddle.svg)](https://beta.hexfaktor.org/github/ClubNix/paddle)
 [![Prod Deps Status](https://beta.hexfaktor.org/badge/prod/github/ClubNix/paddle.svg)](https://beta.hexfaktor.org/github/ClubNix/paddle)
