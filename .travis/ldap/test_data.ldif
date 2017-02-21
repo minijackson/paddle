@@ -34,3 +34,15 @@ cn: adm
 objectClass: top
 objectClass: posixGroup
 gidNumber: 3
+
+dn: ou=Rooms,dc=test,dc=com
+objectClass: top
+objectClass: organizationalUnit
+ou: Rooms
+
+dn: commonName=meetingRoom,ou=Rooms,dc=test,dc=com
+objectClass: top
+objectClass: room
+commonName: meetingRoom
+roomNumber: 42
+description: The Room where meetings happens

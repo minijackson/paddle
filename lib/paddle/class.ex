@@ -75,70 +75,54 @@ defprotocol Paddle.Class do
       Paddle.PosixAccount.get_next_uid(%Paddle.PosixAccount{uid: "myUser", ...}
   """
   def generators(_)
+
 end
 
-defmodule Paddle.PosixAccount do
+defmodule Paddle.Class.Helper do
   @moduledoc ~S"""
-  Class representing an account / posixAccount in a LDAP.
+  A helper module to help generate paddle classes.
+
+  Example:
+
+      Paddle.Class.Helper.gen_class MyApp.Room,
+        fields: [:commonName, :roomNumber, :description, :seeAlso, :telephoneNumber],
+        unique_identifier: :commonName,
+        object_classes: ["room"],
+        required_attributes: [:commonName],
+        location: "ou=Rooms"
+
+  The available options are all function names defined and documented
+  in the `Paddle.Class` protocol, plus the `:fields` option which
+  defines all the available fields for the given class.
+
+  Please note that using the `:generators` option here is discouraged
+  as generators should be inside the module and not elsewhere. Unless
+  you know what you are doing you should define the module yourself
+  instead of using this macro in this case (see the `Paddle.Class` and
+  the source of this macro for guidelines).
   """
 
-  defstruct [# posixAccount
-             :uid, :cn, :uidNumber, :gidNumber, :homeDirectory, :userPassword,
-             :loginShell, :gecos, :description,
-             # account
-             :seeAlso, :l, :o, :ou, :host]
+  defmacro gen_class(class_name, options) do
+    fields              = Keyword.get(options, :fields)
+    unique_identifier   = Keyword.get(options, :unique_identifier)
+    object_classes      = Keyword.get(options, :object_classes)
+    required_attributes = Keyword.get(options, :required_attributes)
+    location            = Keyword.get(options, :location)
+    generators          = Keyword.get(options, :generators, [])
 
-  @spec get_next_uid(Paddle.Class.t) :: integer
+    quote do
+      defmodule unquote(class_name) do
+        defstruct unquote(fields)
+      end
 
-  @doc ~S"""
-  Get a uid for a new user.
-
-  It will get the maximum uidNumber from the users in the current LDAP server
-  and increment it by 1.
-  """
-  def get_next_uid(_) do
-    (Paddle.get!(%__MODULE__{})
-     |> Enum.flat_map(&Map.get(&1, :uidNumber))
-     |> Enum.map(&String.to_integer/1)
-     |> Enum.max) + 1
+      defimpl Paddle.Class, for: unquote(class_name) do
+        def unique_identifier(_),   do: unquote(unique_identifier)
+        def object_classes(_),      do: unquote(object_classes)
+        def required_attributes(_), do: unquote(required_attributes)
+        def location(_),            do: unquote(location)
+        def generators(_),          do: unquote(generators)
+      end
+    end
   end
-end
 
-defimpl Paddle.Class, for: Paddle.PosixAccount do
-  def unique_identifier(_), do: :uid
-  def object_classes(_), do: ["posixAccount", "account"]
-  def required_attributes(_), do: [:uid, :cn, :uidNumber, :gidNumber, :homeDirectory]
-  def location(_), do: Paddle.config(:account_subdn) |> List.to_string
-  def generators(_), do: [uidNumber: &Paddle.PosixAccount.get_next_uid/1]
-end
-
-defmodule Paddle.PosixGroup do
-  @moduledoc ~S"""
-  Class representing a posixGroup in a LDAP.
-  """
-
-  defstruct [:cn, :gidNumber, :userPassword, :memberUid, :description]
-
-  @spec get_next_gid(Paddle.Class.t) :: integer
-
-  @doc ~S"""
-  Get a gid for a new group.
-
-  It will get the maximum gidNumber in the current LDAP server and increment it
-  by 1.
-  """
-  def get_next_gid(_) do
-    (Paddle.get!(%__MODULE__{})
-     |> Enum.flat_map(&Map.get(&1, :gidNumber))
-     |> Enum.map(&String.to_integer/1)
-     |> Enum.max) + 1
-  end
-end
-
-defimpl Paddle.Class, for: Paddle.PosixGroup do
-  def unique_identifier(_), do: :cn
-  def object_classes(_), do: ["posixGroup"]
-  def required_attributes(_), do: [:cn, :gidNumber]
-  def location(_), do: Paddle.config(:group_subdn) |> List.to_string
-  def generators(_), do: [gidNumber: &Paddle.PosixGroup.get_next_gid/1]
 end
