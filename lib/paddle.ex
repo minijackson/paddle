@@ -379,7 +379,7 @@ defmodule Paddle do
        [%Paddle.PosixGroup{cn: ["adm"], description: nil, gidNumber: ["3"],
          memberUid: nil, userPassword: nil}]}
   """
-  def get(object, additional_filter \\ []) do
+  def get(object, additional_filter \\ nil) do
     fields_filter = object
              |> Map.from_struct
              |> Enum.filter(fn {_key, value} -> value != nil end)
@@ -539,6 +539,12 @@ defmodule Paddle do
   A modification is specified like so:
 
       {action, {parameters...}}
+
+  Available modifications:
+
+  - `{:add, {field, value}}`
+  - `{:delete, field}`
+  - `{:replace, {field, value}}`
 
   For example, adding a "description" field:
 
