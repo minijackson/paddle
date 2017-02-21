@@ -6,6 +6,9 @@ defprotocol Paddle.Class do
   Implementing this protocol for your specific classes will enable you to
   manipulate LDAP entries in an easier way than using DNs (hopefully).
 
+  If the class you want to implement is simple enough, you might want to use
+  the `Paddle.Class.Helper.gen_class/2` macro.
+
   For now, only two "classes" implementing this protocol are provided:
   `Paddle.PosixAccount` and `Paddle.PosixGroup`.
   """
@@ -97,11 +100,15 @@ defmodule Paddle.Class.Helper do
 
   Please note that using the `:generators` option here is discouraged
   as generators should be inside the module and not elsewhere. Unless
-  you know what you are doing you should define the module yourself
-  instead of using this macro in this case (see the `Paddle.Class` and
-  the source of this macro for guidelines).
+  you are sure what you are doing is elegant enough, you should define the
+  module yourself instead of using this macro with the `:generators` option
+  (see the `Paddle.Class` and the source of this macro for guidelines).
   """
 
+  @doc ~S"""
+  Generate a Paddle class represented as a struct with the name `class_name`,
+  and the options `options` (see the module toplevel documentation).
+  """
   defmacro gen_class(class_name, options) do
     fields              = Keyword.get(options, :fields)
     unique_identifier   = Keyword.get(options, :unique_identifier)
