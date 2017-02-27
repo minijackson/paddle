@@ -3,7 +3,7 @@ defmodule Paddle.Mixfile do
 
   def project do
     [app: :paddle,
-     version: "0.1.0",
+     version: "0.1.1",
      description: "A library simplifying LDAP usage",
      elixir: "~> 1.3",
      build_embedded: Mix.env == :prod,
@@ -43,8 +43,7 @@ defmodule Paddle.Mixfile do
     [name: :paddle,
      maintainers: ["Rémi Nicole"],
      licenses: ["MIT"],
-     links: %{"GitHub" => "https://github.com/ClubNix/paddle",
-              "Docs" => "https://hexdocs.pm/paddle/Paddle.html"}]
+     links: %{"GitHub" => "https://github.com/ClubNix/paddle"}]
   end
 
 end
