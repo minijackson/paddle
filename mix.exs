@@ -10,8 +10,8 @@ defmodule Paddle.Mixfile do
      start_permanent: Mix.env == :prod,
      deps: deps(),
      package: package(),
-     source_url: "https://github.com/ClubNix/paddle",
-     homepage_url: "https://github.com/ClubNix/paddle",
+     source_url: "https://github.com/minijackson/paddle",
+     homepage_url: "https://github.com/minijackson/paddle",
      docs: [extras: ["README.md"]]]
   end
 
@@ -43,7 +43,7 @@ defmodule Paddle.Mixfile do
     [name: :paddle,
      maintainers: ["Rémi Nicole"],
      licenses: ["MIT"],
-     links: %{"GitHub" => "https://github.com/ClubNix/paddle"}]
+     links: %{"GitHub" => "https://github.com/minijackson/paddle"}]
   end
 
 end

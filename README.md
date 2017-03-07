@@ -1,10 +1,10 @@
 # Paddle
 
 [![hex.pm version](https://img.shields.io/hexpm/v/paddle.svg)](https://hex.pm/packages/paddle)
-[![Build Status](https://travis-ci.org/ClubNix/paddle.svg?branch=master)](https://travis-ci.org/ClubNix/paddle)
-[![Deps Status](https://beta.hexfaktor.org/badge/all/github/ClubNix/paddle.svg)](https://beta.hexfaktor.org/github/ClubNix/paddle)
-[![Prod Deps Status](https://beta.hexfaktor.org/badge/prod/github/ClubNix/paddle.svg)](https://beta.hexfaktor.org/github/ClubNix/paddle)
-[![Inline docs](http://inch-ci.org/github/ClubNix/paddle.svg)](http://inch-ci.org/github/ClubNix/paddle)
+[![Build Status](https://travis-ci.org/minijackson/paddle.svg?branch=master)](https://travis-ci.org/minijackson/paddle)
+[![Deps Status](https://beta.hexfaktor.org/badge/all/github/minijackson/paddle.svg)](https://beta.hexfaktor.org/github/minijackson/paddle)
+[![Prod Deps Status](https://beta.hexfaktor.org/badge/prod/github/minijackson/paddle.svg)](https://beta.hexfaktor.org/github/minijackson/paddle)
+[![Inline docs](http://inch-ci.org/github/minijackson/paddle.svg)](http://inch-ci.org/github/minijackson/paddle)
 
 A library simplifying LDAP usage in Elixir projects.
 
