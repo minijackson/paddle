@@ -34,7 +34,7 @@ defmodule Paddle.Mixfile do
   # Type "mix help deps" for more examples and options
   defp deps do
     [{:ex_doc, "~> 0.11", only: :dev},
-     {:dialyxir, "~> 0.3.5", only: [:dev, :test]},
+     {:dialyxir, "~> 0.5", only: [:dev, :test]},
      {:credo, "~> 0.6", only: [:dev, :test]},
      {:inch_ex, "~> 0.5", only: [:dev, :test]}]
   end
