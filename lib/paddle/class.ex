@@ -7,7 +7,8 @@ defprotocol Paddle.Class do
   manipulate LDAP entries in an easier way than using DNs (hopefully).
 
   If the class you want to implement is simple enough, you might want to use
-  the `Paddle.Class.Helper.gen_class/2` macro.
+  the `Paddle.Class.Helper.gen_class_from_schema/3` or
+  `Paddle.Class.Helper.gen_class/2` macros.
 
   For now, only two "classes" implementing this protocol are provided:
   `Paddle.PosixAccount` and `Paddle.PosixGroup`.
@@ -18,8 +19,8 @@ defprotocol Paddle.Class do
   @doc ~S"""
   Return the name of the attribute used in the DN to uniquely identify entries.
 
-  For example, the identifier for an account is `:uid` because an account DN is
-  like this: `"uid=testuser,ou=People,..."`
+  For example, the identifier for an account would be `:uid` because an account
+  DN would be like: `"uid=testuser,ou=People,..."`
   """
   def unique_identifier(_)
 
@@ -64,7 +65,7 @@ defprotocol Paddle.Class do
   Return a list of attributes to be generated using the given functions.
 
   **Warning:** do not use functions with side effects, as this function may be
-  called even if adding a LDAP entry fails.
+  called even if adding some LDAP entries fails.
 
   Example: [uid: &Paddle.PosixAccount.get_next_uid/1]
 
@@ -85,8 +86,37 @@ defmodule Paddle.Class.Helper do
   @moduledoc ~S"""
   A helper module to help generate paddle classes.
 
+  There is currently two ways of generating paddle classes:
+
+  ## Using schema files
+
+  The simplest way is to find `*.schema` files which are definitions of LDAP
+  object classes. You can find them in the `/etc/openldap/schema/` directory if
+  you have OpenLDAP installed. If not, you can find most of them
+  [here](https://www.openldap.org/devel/gitweb.cgi?p=openldap.git;a=tree;f=servers/slapd/schema;h=55325b541890a9210178920c78231d2e392b0e39;hb=HEAD).
+  Then, add the path of these files in the Paddle configuration using the
+  `:schema_files` key (see the [`Paddle`](Paddle.html#module-configuration)
+  module toplevel documentation). Finally just call the
+  `gen_class_from_schema/3` macro from anywhere outside of a module.
+
   Example:
 
+      require Paddle.Class.Helper
+      Paddle.Class.Helper.gen_class_from_schema MyApp.Room, ["room"], "ou=Rooms"
+
+  For a description of the parameters and more configuration options, see the
+  `gen_class_from_schema/3` macro documentation.
+
+  ## Manually describing the class
+
+  If you're feeling more adventurous you can still use this helper you can also
+  specify by hand each part of the class using the
+  `Paddle.Class.Helper.gen_class/2` macro (if that still doesn't satisfy you,
+  you can always look at the `Paddle.Class` protocol).
+
+  Example (which is equivalent to the example above):
+
+      require Paddle.Class.Helper
       Paddle.Class.Helper.gen_class MyApp.Room,
         fields: [:commonName, :roomNumber, :description, :seeAlso, :telephoneNumber],
         unique_identifier: :commonName,
@@ -106,10 +136,40 @@ defmodule Paddle.Class.Helper do
   """
 
   @doc ~S"""
+  Generate a Paddle class.
+
   Generate a Paddle class represented as a struct with the name `class_name`,
-  and the options `options` (see the module toplevel documentation).
+  and the options `options` (see [the module toplevel
+  documentation](#module-manually-describing-the-class)).
   """
   defmacro gen_class(class_name, options) do
+    quoted_gen_class(class_name, options)
+  end
+
+  @doc ~S"""
+  Generate a Paddle class from schema files.
+
+  Generate a Paddle class from one of the schema files passed as configuration
+  with the name `class_name`, with the given `object_classes` (can be a binary
+  or a list of binary), at the given location, optionally force specify
+  which field to use as a unique identifier (see
+  `Paddle.Class.unique_identifier/1`), and some optional generators (see
+  `Paddle.Class.generators/1`)
+  """
+  defmacro gen_class_from_schema(class_name, object_classes, location, unique_identifier \\ nil, generators \\ []) do
+    fields              = Paddle.SchemaParser.get_fields(object_classes)
+    required_attributes = Paddle.SchemaParser.get_required_attributes(object_classes)
+    unique_identifier   = unique_identifier || hd(required_attributes)
+
+    quoted_gen_class(class_name, fields: fields,
+                                 unique_identifier: unique_identifier,
+                                 object_classes: object_classes,
+                                 required_attributes: required_attributes,
+                                 location: location,
+                                 generators: generators)
+  end
+
+  defp quoted_gen_class(class_name, options) do
     fields              = Keyword.get(options, :fields)
     unique_identifier   = Keyword.get(options, :unique_identifier)
     object_classes      = Keyword.get(options, :object_classes)

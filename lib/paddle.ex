@@ -15,21 +15,26 @@ defmodule Paddle do
         account_subdn: "ou=People",
         group_subdn: "ou=Group",
         account_class: "inetOrgPerson",
-        group_class: "posixGroup"
+        group_class: "posixGroup",
+        schema_files: Path.wildcard("/etc/openldap/schema/*.schema")
 
-  - `:host` - The host of the LDAP server. Mandatory
-  - `:base` - The base DN.
-  - `:ssl` - When set to `true`, use SSL to connect to the LDAP server.
+  - `:host` -- The host of the LDAP server. Mandatory
+  - `:base` -- The base DN.
+  - `:ssl` -- When set to `true`, use SSL to connect to the LDAP server.
     Defaults to `false`.
-  - `:port` - The port the LDAP server listen to. Defaults to `389`.
-  - `:account_subdn` - The DN (without the base) where the accounts are located.
+  - `:port` -- The port the LDAP server listen to. Defaults to `389`.
+  - `:account_subdn` -- The DN (without the base) where the accounts are located.
     Defaults to `"ou=People"`.
-  - `:group_subdn` - The DN (without the base) where the groups are located.
+  - `:group_subdn` -- The DN (without the base) where the groups are located.
     Defaults to `"ou=Group"`.
-  - `:account_class` - The class (objectClass) of all your user entries.
+  - `:account_class` -- The class (objectClass) of all your user entries.
     Defaults to `"posixAccount"`
-  - `:group_class` - The class (objectClass) of all your group entries.
+  - `:group_class` -- The class (objectClass) of all your group entries.
     Defaults to `"posixGroup"`
+  - `:schema_files` -- Files which are to be parsed to help generate classes
+    using
+    [`Paddle.Class.Helper`](Paddle.Class.Helper.html#module-using-schema-files).
+    Defaults to `[]`.
 
   ## Usage
 
