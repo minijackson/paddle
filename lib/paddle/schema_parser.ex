@@ -5,8 +5,7 @@ defmodule Paddle.SchemaParser do
 
   require Logger
 
-  @definitions Application.get_env(:paddle, Paddle)
-               |> Keyword.get(:schema_files, [])
+  @definitions Paddle.config(:schema_files)
                |> Enum.flat_map(fn file ->
                  Logger.info "Loading #{file}"
                  {:ok, lexed, _num} = file
@@ -14,58 +13,70 @@ defmodule Paddle.SchemaParser do
                                       |> String.to_charlist
                                       |> :schema_lexer.string
                  {:ok, ast} = :schema_parser.parse(lexed)
-                 #ast ++ [filename: file]
                  ast
                end)
 
-  defp filter_definitions(definitions, object_classes) when is_list(object_classes) do
-    for class <- object_classes do
-      filter_definitions(definitions, class)
-    end
-  end
+  @object_definitions Enum.filter(@definitions,
+                                  fn {type, _attrs} -> type == :object_class end)
 
-  defp filter_definitions(definitions, object_class) when is_binary(object_class) do
-    definitions
-    |> Enum.find(fn {:object_class, defs} ->
-      object_class in Keyword.get(defs, :name)
-    end)
-    |> assert_exists(object_class)
-  end
+  @attribute_definitions Enum.filter_map(@definitions,
+                           fn {type, _attrs} -> type == :attribute_type end,
+                           fn {:attribute_type, attrs} -> Keyword.get(attrs, :name) end)
+                         ++ [["uid", "userid"]]
 
-  defp flat_map(enum, fun) when is_list(enum), do: Enum.flat_map(enum, fun)
-  defp flat_map(thing, fun), do: fun.(thing)
 
-  defp assert_exists(nil, name), do: raise "Missing objectClass definition: #{name}"
-  defp assert_exists(thing, _name), do: thing
-
-  @spec get_fields(binary | [binary]) :: [atom]
+  @spec attributes(binary | [binary]) :: [atom]
 
   @doc ~S"""
-  Get the field names af an object class or a list of object classes.
+  Get the attributes names of an object class or a list of object classes.
+
+  Example:
+
+      iex> Paddle.SchemaParser.attributes "account"
+      [:description, :seeAlso, :l, :o, :ou, :host, :uid]
+
+      iex> Paddle.SchemaParser.attributes ["posixAccount", "account"]
+      [:userPassword, :loginShell, :gecos, :description, :cn, :uid, :uidNumber,
+       :gidNumber, :homeDirectory, :seeAlso, :l, :o, :ou, :host]
   """
-  def get_fields(object_classes) do
-    @definitions
+  def attributes(object_classes) do
+    @object_definitions
     |> filter_definitions(object_classes)
-    |> flat_map(&get_fields_from/1)
+    #|> flat_map(&get_fields_from/1)
+    |> Enum.flat_map(&attributes_from/1)
+    |> Enum.map(&replace_alias/1)
+    |> Enum.map(&String.to_atom/1)
+    |> Enum.uniq
   end
 
-  defp get_fields_from({:object_class, description}) do
+  defp attributes_from({:object_class, description}) do
     mays(description) ++ musts(description)
-    |> Enum.map(&String.to_atom/1)
   end
 
-  @spec get_required_attributes(binary | [binary]) :: [atom]
+  @spec required_attributes(binary | [binary]) :: [atom]
 
-  def get_required_attributes(object_classes) do
-    @definitions
+  @doc ~S"""
+  Get the required attributes names of an object class or a list of object
+  classes.
+
+  Example:
+
+      iex> Paddle.SchemaParser.required_attributes "account"
+      [:uid]
+      iex> Paddle.SchemaParser.required_attributes ["posixAccount", "account"]
+      [:cn, :uid, :uidNumber, :gidNumber, :homeDirectory]
+  """
+  def required_attributes(object_classes) do
+    @object_definitions
     |> filter_definitions(object_classes)
-    |> flat_map(&get_required_attributes_from/1)
+    |> flat_map(&required_attributes_from/1)
+    |> Enum.map(&replace_alias/1)
+    |> Enum.map(&String.to_atom/1)
+    |> Enum.uniq
   end
 
-  defp get_required_attributes_from({:object_class, description}) do
-    description
-    |> musts
-    |> Enum.map(&String.to_atom/1)
+  defp required_attributes_from({:object_class, description}) do
+    musts(description)
   end
 
   defp mays(description) do
@@ -78,10 +89,50 @@ defmodule Paddle.SchemaParser do
     |> Keyword.get(:must, [])
   end
 
-  #defp get_unique_identifier_from({:object_class, description}) do
-    #description
-    #|> Keyword.get(:must, [])
-    #|> hd
-  #end
+  defp filter_definitions(definitions, object_class) when is_binary(object_class) do
+    filter_definitions(definitions, [object_class])
+  end
+
+  defp filter_definitions(definitions, object_classes) when is_list(object_classes) do
+    object_classes = object_classes
+                     |> Enum.map(fn class -> {class, :notfound} end)
+                     |> Enum.into(%{})
+
+    filter_definitions(definitions, object_classes, [])
+  end
+
+  defp filter_definitions([], object_classes, filtered) when is_map(object_classes) do
+    not_found = object_classes
+                |> Enum.filter_map(fn {_class, status} -> status == :notfound end,
+                                   fn {class, _status} -> class end)
+
+    case not_found do
+      [] -> filtered
+      _  -> raise "Missing object classe(s) definition(s): " <> Enum.join(not_found, ", ")
+    end
+  end
+
+  defp filter_definitions([{:object_class, attrs} = class | rest], object_classes, filtered) when is_map(object_classes) do
+    name = attrs |> Keyword.get(:name) |> hd
+    if Map.has_key?(object_classes, name) do
+      if object_classes[name] == :notfound do
+        filter_definitions(rest, Map.put(object_classes, name, :found), [class | filtered])
+      else
+        IO.warn("Multiple definitions of the \"#{name}\" object class", [])
+        filter_definitions(rest, object_classes, filtered)
+      end
+    else
+      filter_definitions(rest, object_classes, filtered)
+    end
+  end
+
+  defp replace_alias(field) do
+    Enum.find_value(@attribute_definitions, fn aliases ->
+      if field in aliases, do: hd(aliases)
+    end) || field
+  end
+
+  defp flat_map(list, fun) when is_list(list), do: Enum.flat_map(list, fun)
+  defp flat_map(thing, fun), do: fun.(thing)
 
 end

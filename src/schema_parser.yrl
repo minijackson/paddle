@@ -31,7 +31,7 @@ Rootsymbol
 % - 'mystring'                <- like a qstring
 % - ( 'mystring' 'mystring')  <- not like a qstring
 real_qdescrs -> qdescrs  : split('$1').
-real_qdescrs -> qdstring : unquote('$1').
+real_qdescrs -> qdstring : [unquote('$1')].
 
 % NOIdLen can be:
 % - 1.2.3.4.5  <- like a numericoid
@@ -60,14 +60,14 @@ oid -> numericoid.
 % ==========
 
 schema -> object_def schema : ['$1' | '$2'].
-schema -> attribute_def schema : '$2'.
+schema -> attribute_def schema : ['$1' | '$2'].
 schema -> objectid_def schema : '$2'.
 schema -> syntax_def schema : '$2'.
 schema -> '$empty' : [].
 
 object_def    -> object_class object_class_schema     : '$2'.
 
-attribute_def -> attribute_type attribute_type_schema : [].
+attribute_def -> attribute_type attribute_type_schema : '$2'.
 
 objectid_def -> object_identifier woid numericoid.
 
@@ -78,7 +78,7 @@ syntax_def -> ldap_syntax syntax_schema.
 % ===========================
 
 name       -> 'NAME' real_qdescrs : [{name, '$2'}].
-desc       -> 'DESC' qdstring     : [{desc, unquote('$2')}].
+desc       -> 'DESC' qdstring     : [{desc, [unquote('$2')]}].
 obsolete   -> 'OBSOLETE'          : [obsolete].
 sup        -> 'SUP' real_oids     : [{sup, '$2'}].
 extensions -> xstring qdstrings   : [].
@@ -117,14 +117,14 @@ object_class_schema -> '('
 % == Definitions for attributeType ==
 % ===================================
 
-equality             -> 'EQUALITY' woid.
-ordering             -> 'ORDERING' woid.
-substr               -> 'SUBSTR' woid.
-syntax               -> 'SYNTAX' real_noidlen.
-single_value         -> 'SINGLE-VALUE'.
-collective           -> 'COLLECTIVE'.
-no_user_modification -> 'NO-USER-MODIFICATION'.
-usage                -> 'USAGE' attribute_usage.
+equality             -> 'EQUALITY' woid         : [].
+ordering             -> 'ORDERING' woid         : [].
+substr               -> 'SUBSTR' woid           : [].
+syntax               -> 'SYNTAX' real_noidlen   : [].
+single_value         -> 'SINGLE-VALUE'          : [].
+collective           -> 'COLLECTIVE'            : [].
+no_user_modification -> 'NO-USER-MODIFICATION'  : [].
+usage                -> 'USAGE' attribute_usage : [].
 
 attribute_type_description -> name                 : '$1'.
 attribute_type_description -> desc                 : '$1'.
@@ -142,13 +142,13 @@ attribute_type_description -> extensions           : '$1'.
 
 attribute_type_descriptions ->
 	attribute_type_description attribute_type_descriptions
-	: ['$1' | '$2'].
+	: '$1' ++ '$2'.
 attribute_type_descriptions -> '$empty' : [].
 
 attribute_type_schema -> '('
 	oid
 	attribute_type_descriptions
-	')'.
+	')' : {attribute_type, '$3'}.
 
 % ================================
 % == Definitions for ldapSyntax ==
@@ -174,7 +174,7 @@ Erlang code.
 unquote({qdstring, _Line, Str}) ->
 	unquote(Str);
 unquote(Str) ->
-	[list_to_binary(string:strip(Str, both, $'))].
+	list_to_binary(string:strip(Str, both, $')).
 
 split({woid, _Line, Str}) ->
 	[list_to_binary(Str)];

@@ -157,8 +157,8 @@ defmodule Paddle.Class.Helper do
   `Paddle.Class.generators/1`)
   """
   defmacro gen_class_from_schema(class_name, object_classes, location, unique_identifier \\ nil, generators \\ []) do
-    fields              = Paddle.SchemaParser.get_fields(object_classes)
-    required_attributes = Paddle.SchemaParser.get_required_attributes(object_classes)
+    fields              = Paddle.SchemaParser.attributes(object_classes)
+    required_attributes = Paddle.SchemaParser.required_attributes(object_classes)
     unique_identifier   = unique_identifier || hd(required_attributes)
 
     quoted_gen_class(class_name, fields: fields,

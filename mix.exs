@@ -12,6 +12,7 @@ defmodule Paddle.Mixfile do
      package: package(),
      source_url: "https://github.com/minijackson/paddle",
      homepage_url: "https://github.com/minijackson/paddle",
+     elixirc_paths: elixirc_paths(Mix.env),
      docs: [extras: ["README.md"]]]
   end
 
@@ -46,4 +47,7 @@ defmodule Paddle.Mixfile do
      links: %{"GitHub" => "https://github.com/minijackson/paddle"}]
   end
 
+  defp elixirc_paths(:prod), do: ["lib"]
+  defp elixirc_paths(:dev),  do: elixirc_paths(:prod)
+  defp elixirc_paths(:test), do: ["test/support"] ++ elixirc_paths(:dev)
 end

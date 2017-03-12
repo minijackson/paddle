@@ -22,7 +22,6 @@ use Mix.Config
 #
 
 config :paddle, Paddle,
-  schema_files: Path.wildcard("/etc/openldap/schema/*.schema"),
   host: "ldap.my-organisation.org",
   base: "dc=myorganisation,dc=org",
   ssl: true,

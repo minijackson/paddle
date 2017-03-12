@@ -13,9 +13,6 @@ defmodule Paddle do
         ssl: true,
         port: 636,
         account_subdn: "ou=People",
-        group_subdn: "ou=Group",
-        account_class: "inetOrgPerson",
-        group_class: "posixGroup",
         schema_files: Path.wildcard("/etc/openldap/schema/*.schema")
 
   - `:host` -- The host of the LDAP server. Mandatory
@@ -23,14 +20,9 @@ defmodule Paddle do
   - `:ssl` -- When set to `true`, use SSL to connect to the LDAP server.
     Defaults to `false`.
   - `:port` -- The port the LDAP server listen to. Defaults to `389`.
-  - `:account_subdn` -- The DN (without the base) where the accounts are located.
-    Defaults to `"ou=People"`.
-  - `:group_subdn` -- The DN (without the base) where the groups are located.
-    Defaults to `"ou=Group"`.
-  - `:account_class` -- The class (objectClass) of all your user entries.
-    Defaults to `"posixAccount"`
-  - `:group_class` -- The class (objectClass) of all your group entries.
-    Defaults to `"posixGroup"`
+  - `:account_subdn` -- The DN (without the base) where the accounts are
+    located. Used by the `Paddle.authenticate/2` function.  Defaults to
+    `"ou=People"`.
   - `:schema_files` -- Files which are to be parsed to help generate classes
     using
     [`Paddle.Class.Helper`](Paddle.Class.Helper.html#module-using-schema-files).
@@ -52,9 +44,10 @@ defmodule Paddle do
       Paddle.get(filter: [uid: "testuser"], base: [ou: "People"])
 
   But you can also use structs which implements the `Paddle.Class` protocol
-  (called [class objects](#module-class-objects)). Some are already defined:
+  (called [class objects](#module-class-objects)). If we take as example the
+  classes defined in `test/support/classes.ex`, we could do:
 
-      Paddle.get %Paddle.PosixAccount{uid: "user"}
+      Paddle.get %MyApp.PosixAccount{uid: "user"}
 
   The previous example will return every accounts which are in a given subDN
   (defined in the `Paddle.Class` protocol), which have the right objectClass
@@ -63,19 +56,13 @@ defmodule Paddle do
   You can also specify an additional [filter](#module-filters) as second
   argument.
 
-  You are also provided with some "user" functions that will automatically get
-  the information from the right subDN and check that the entry have the
-  right objectClass, see [Configuration](#module-configuration).
-
-  Example:
-
-      Paddle.users(filter: [givenName: "User"])
-
   ## Class objects
 
   A class object is simply a struct implementing the `Paddle.Class` protocol.
-  Some "classes" are already defined and implemented (see
-  `Paddle.PosixAccount`, and `Paddle.PosixGroup`)
+
+  If you're in need of some examples, you can see the `test/support/classes.ex`
+  file which defines `MyApp.PosixAccount`, and `MyApp.PosixGroup` (but only
+  in test mode, so you would have to define your own).
 
   For more informations, see the `Paddle.Class` module documentation.
 
@@ -250,9 +237,9 @@ defmodule Paddle do
   @doc ~S"""
   Check the given credentials.
 
-  The user id can be given through a binary, which will expand to
-  `uid=<id>,<group subdn>,<base>`, or through a keyword list if you want to
-  specify the whole DN (still without the base).
+  The user id can be given a binary, which will expand to
+  `uid=<id>,<account subdn>,<base>`, or with a keyword list if you want to
+  specify the whole DN (but still without the base).
 
   Example:
 
@@ -280,7 +267,7 @@ defmodule Paddle do
 
   Example:
 
-      iex> Paddle.get_dn(%Paddle.PosixAccount{uid: "testuser"})
+      iex> Paddle.get_dn(%MyApp.PosixAccount{uid: "testuser"})
       {:ok, "uid=testuser,ou=People"}
   """
   def get_dn(object) do
@@ -364,9 +351,9 @@ defmodule Paddle do
 
   Example:
 
-      iex> Paddle.get(%Paddle.PosixAccount{})
+      iex> Paddle.get(%MyApp.PosixAccount{})
       {:ok,
-       [%Paddle.PosixAccount{cn: ["Test User"], description: nil,
+       [%MyApp.PosixAccount{cn: ["Test User"], description: nil,
          gecos: ["Test User,,,,"], gidNumber: ["120"],
          homeDirectory: ["/home/testuser"], host: nil, l: nil,
          loginShell: ["/bin/bash"], o: nil,
@@ -374,20 +361,20 @@ defmodule Paddle do
          uidNumber: ["500"],
          userPassword: ["{SSHA}AIzygLSXlArhAMzddUriXQxf7UlkqopP"]}]}
 
-      iex> Paddle.get(%Paddle.PosixGroup{cn: "users"})
+      iex> Paddle.get(%MyApp.PosixGroup{cn: "users"})
       {:ok,
-       [%Paddle.PosixGroup{cn: ["users"], description: nil, gidNumber: ["2"],
+       [%MyApp.PosixGroup{cn: ["users"], description: nil, gidNumber: ["2"],
          memberUid: ["testuser"], userPassword: nil}]}
 
-      iex> Paddle.get(%Paddle.PosixGroup{}, :eldap.substrings('cn', initial: 'a'))
+      iex> Paddle.get(%MyApp.PosixGroup{}, :eldap.substrings('cn', initial: 'a'))
       {:ok,
-       [%Paddle.PosixGroup{cn: ["adm"], description: nil, gidNumber: ["3"],
+       [%MyApp.PosixGroup{cn: ["adm"], description: nil, gidNumber: ["3"],
          memberUid: nil, userPassword: nil}]}
   """
   def get(object, additional_filter \\ nil) do
     fields_filter = object
-             |> Map.from_struct
-             |> Enum.filter(fn {_key, value} -> value != nil end)
+                    |> Map.from_struct
+                    |> Enum.filter(fn {_key, value} -> value != nil end)
     filter = Filters.class_filter(Paddle.Class.object_classes(object))
              |> Filters.merge_filter(fields_filter)
              |> Filters.merge_filter(additional_filter)
@@ -483,7 +470,7 @@ defmodule Paddle do
 
   Example:
 
-      Paddle.add(%Paddle.PosixAccount{uid: "myUser", cn: "My User", gidNumber: "501", homeDirectory: "/home/myUser"})
+      Paddle.add(%MyApp.PosixAccount{uid: "myUser", cn: "My User", gidNumber: "501", homeDirectory: "/home/myUser"})
   """
   def add(class_object) do
     with {:ok, dn} <- get_dn(class_object),
@@ -508,10 +495,10 @@ defmodule Paddle do
 
       Paddle.delete("uid=testuser,ou=People")
       Paddle.delete([uid: "testuser", ou: "People"])
-      Paddle.delete(%Paddle.PosixAccount{uid: "testuser"})
+      Paddle.delete(%MyApp.PosixAccount{uid: "testuser"})
 
   The three examples above do exactly the same thing (provided that the
-  `Paddle.PosixAccount` is configured appropriately).
+  `MyApp.PosixAccount` is configured appropriately).
   """
   def delete(kwdn) when is_list(kwdn) or is_binary(kwdn) do
     GenServer.call(Paddle, {:delete, kwdn, :base})
@@ -594,11 +581,8 @@ defmodule Paddle do
   def config(:port),          do: config(:port, 389)
   def config(:base),          do: config(:base, "")                      |> String.to_charlist
   def config(:account_base),  do: config(:account_subdn) ++ ',' ++ config(:base)
-  def config(:group_base),    do: config(:group_subdn)   ++ ',' ++ config(:base)
   def config(:account_subdn), do: config(:account_subdn, "ou=People")    |> String.to_charlist
-  def config(:group_subdn),   do: config(:group_subdn, "ou=Group")       |> String.to_charlist
-  def config(:account_class), do: config(:account_class, "posixAccount") |> String.to_charlist
-  def config(:group_class),   do: config(:group_class, "posixGroup")     |> String.to_charlist
+  def config(:schema_files),  do: config(:schema_files, [])
 
   @spec config(atom, any) :: any
 

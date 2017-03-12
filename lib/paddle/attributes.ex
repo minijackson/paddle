@@ -10,13 +10,13 @@ defmodule Paddle.Attributes do
 
   Examples:
 
-      iex> Paddle.Attributes.get(%Paddle.PosixGroup{})
+      iex> Paddle.Attributes.get(%MyApp.PosixGroup{})
       {:error, :missing_required_attributes, [:cn]}
 
-      iex> Paddle.Attributes.get(%Paddle.PosixGroup{cn: "myGroup"})
+      iex> Paddle.Attributes.get(%MyApp.PosixGroup{cn: "myGroup"})
       {:ok,
        %{cn: "myGroup", description: nil, gidNumber: 4, memberUid: nil,
-         objectClass: ["posixGroup"], userPassword: nil}}
+         objectClass: "posixGroup", userPassword: nil}}
   """
   def get(class_object) do
     given_attributes = Map.from_struct(class_object)
