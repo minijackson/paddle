@@ -3,14 +3,15 @@ defmodule Paddle.Filters do
   Module used internally by Paddle to manipulate LDAP filters.
   """
 
-  @type easy_filter :: keyword
+  @type easy_filter :: keyword | %{optional(atom | binary) => binary}
   @type eldap_filter :: tuple
-  @type filter :: easy_filter | eldap_filter
+  @type filter :: easy_filter | eldap_filter | nil
+  @type t :: filter
 
   @spec construct_filter(filter) :: eldap_filter
 
   @doc ~S"""
-  Construct a eldap filter from the given keyword list.
+  Construct a eldap filter from the given keyword list or map.
 
   If given an `:eldap` filter (a tuple), it is returned as is.
 
@@ -19,6 +20,12 @@ defmodule Paddle.Filters do
   Examples:
 
       iex> Paddle.Filters.construct_filter(uid: "testuser")
+      {:equalityMatch, {:AttributeValueAssertion, 'uid', 'testuser'}}
+
+      iex> Paddle.Filters.construct_filter(%{uid: "testuser"})
+      {:equalityMatch, {:AttributeValueAssertion, 'uid', 'testuser'}}
+
+      iex> Paddle.Filters.construct_filter(%{"uid" => "testuser"})
       {:equalityMatch, {:AttributeValueAssertion, 'uid', 'testuser'}}
 
       iex> Paddle.Filters.construct_filter(:eldap.substrings('uid', initial: 'b'))
@@ -37,6 +44,10 @@ defmodule Paddle.Filters do
   """
   def construct_filter(filter) when is_tuple(filter), do: filter
   def construct_filter(nil), do: :eldap.and([])
+
+  def construct_filter(filter) when is_map(filter), do: filter
+                                                        |> Enum.into([])
+                                                        |> construct_filter
 
   def construct_filter([{key, value}]) when is_binary(value) do
     :eldap.equalityMatch('#{key}', '#{value}')

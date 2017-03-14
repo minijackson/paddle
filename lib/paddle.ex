@@ -39,7 +39,7 @@ defmodule Paddle do
       Paddle.authenticate([cn: "admin"], "adminpassword")
 
   Many functions support passing both a base and a filter via a keyword list
-  like so:
+  or a map like so:
 
       Paddle.get(filter: [uid: "testuser"], base: [ou: "People"])
 
@@ -68,9 +68,11 @@ defmodule Paddle do
 
   ## Filters
 
-  A filter in Paddle is a Keyword list and the atom corresponding to the key
-  must have a value strictly equal to, well the given value. When multiple
-  keywords are provided, the result must match all criteria.
+  A filter in Paddle is a keyword list or a map.
+
+  This is equivalent to a filter where each attribute name (key from the map /
+  keyword list) must have a corresponding value (value from the map / keyword
+  list).
 
   Example:
 
@@ -260,7 +262,7 @@ defmodule Paddle do
     GenServer.call(Paddle, {:authenticate, dn, String.to_charlist(password)})
   end
 
-  @spec get_dn(struct) :: {:ok, binary} | {:error, :missing_unique_identifier}
+  @spec get_dn(Paddle.Class.t) :: {:ok, binary} | {:error, :missing_unique_identifier}
 
   @doc ~S"""
   Get the DN of an entry.
@@ -295,7 +297,7 @@ defmodule Paddle do
   @spec get(keyword) :: {:ok, [ldap_entry]} | {:error, search_ldap_error}
 
   @doc ~S"""
-  Get one or more LDAP entries given a keyword list.
+  Get one or more LDAP entries given a partial DN and a filter.
 
   Example:
 
@@ -343,7 +345,7 @@ defmodule Paddle do
                     :base})
   end
 
-  @spec get(Paddle.Class.t, [tuple]) :: {:ok, [Paddle.Class.t]} | {:error, search_ldap_error}
+  @spec get(Paddle.Class.t, Paddle.Filters.t) :: {:ok, [Paddle.Class.t]} | {:error, search_ldap_error}
 
   @doc ~S"""
   Get an entry in the LDAP given a class object. You can specify an optional
@@ -371,7 +373,7 @@ defmodule Paddle do
        [%MyApp.PosixGroup{cn: ["adm"], description: nil, gidNumber: ["3"],
          memberUid: nil, userPassword: nil}]}
   """
-  def get(object, additional_filter \\ nil) do
+  def get(object, additional_filter \\ nil) when is_map(object) do
     fields_filter = object
                     |> Map.from_struct
                     |> Enum.filter(fn {_key, value} -> value != nil end)
@@ -396,7 +398,7 @@ defmodule Paddle do
     result
   end
 
-  @spec get!(Paddle.Class.t, [tuple]) :: [Paddle.Class.t]
+  @spec get!(Paddle.Class.t, Paddle.Filters.t) :: [Paddle.Class.t]
 
   @doc ~S"""
   Same as `get/2` but throws in case of an error.
@@ -409,7 +411,7 @@ defmodule Paddle do
   @spec get_single(keyword) :: {:ok, ldap_entry} | {:error, search_ldap_error}
 
   @doc ~S"""
-  Get a single LDAP entry given a keyword list.
+  Get a single LDAP entry given an optional partial DN and an optional filter.
 
   Example:
 

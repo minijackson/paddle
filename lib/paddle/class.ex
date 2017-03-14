@@ -24,10 +24,11 @@ defprotocol Paddle.Class do
   """
   def unique_identifier(_)
 
-  @spec object_classes(Paddle.Class) :: [binary]
+  @spec object_classes(Paddle.Class) :: binary | [binary]
 
   @doc ~S"""
-  Must return the list of classes which this "class" belongs to.
+  Must return the class or the list of classes which this "object class"
+  belongs to.
 
   For example, a posixAccount could have the following object classes:
   `["account", "posixAccount"]`

@@ -40,9 +40,9 @@ iex> Paddle.authenticate("myUser", "password")
 Get meaningful informations using [paddle class objects](https://hexdocs.pm/paddle/Paddle.Class.html):
 
 ```elixir
-iex> Paddle.get %Paddle.PosixAccount{uid: "myUser"}
+iex> Paddle.get %MyApp.PosixAccount{uid: "myUser"}
 {:ok,
- [%Paddle.PosixAccount{cn: ["My User"], description: nil,
+ [%MyApp.PosixAccount{cn: ["My User"], description: nil,
    gecos: ["My User,,,,"], gidNumber: ["120"],
    homeDirectory: ["/home/myuser"], host: nil, l: nil,
    loginShell: ["/bin/bash"], o: nil, ou: nil, seeAlso: nil, uid: ["myUser"],
