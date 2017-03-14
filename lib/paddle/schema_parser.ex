@@ -42,7 +42,6 @@ defmodule Paddle.SchemaParser do
   def attributes(object_classes) do
     @object_definitions
     |> filter_definitions(object_classes)
-    #|> flat_map(&get_fields_from/1)
     |> Enum.flat_map(&attributes_from/1)
     |> Enum.map(&replace_alias/1)
     |> Enum.map(&String.to_atom/1)
@@ -69,7 +68,7 @@ defmodule Paddle.SchemaParser do
   def required_attributes(object_classes) do
     @object_definitions
     |> filter_definitions(object_classes)
-    |> flat_map(&required_attributes_from/1)
+    |> Enum.flat_map(&required_attributes_from/1)
     |> Enum.map(&replace_alias/1)
     |> Enum.map(&String.to_atom/1)
     |> Enum.uniq
@@ -131,8 +130,5 @@ defmodule Paddle.SchemaParser do
       if field in aliases, do: hd(aliases)
     end) || field
   end
-
-  defp flat_map(list, fun) when is_list(list), do: Enum.flat_map(list, fun)
-  defp flat_map(thing, fun), do: fun.(thing)
 
 end
