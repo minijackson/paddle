@@ -183,20 +183,20 @@ defmodule Paddle.Class.Helper do
     {unique_identifier, _bindings} = Code.eval_quoted(unique_identifier, [], __CALLER__)
     {generators,        _bindings} = Code.eval_quoted(generators,        [], __CALLER__)
 
+    fields              = Paddle.SchemaParser.attributes(object_classes)
+    required_attributes = Paddle.SchemaParser.required_attributes(object_classes)
+    unique_identifier   = unique_identifier || hd(required_attributes)
+
     quote do
       defmodule unquote(class_name) do
-        @fields              Paddle.SchemaParser.attributes(unquote(object_classes))
-
-        defstruct @fields
+        defstruct unquote(fields)
       end
 
       defimpl Paddle.Class, for: unquote(class_name) do
-        @required_attributes Paddle.SchemaParser.required_attributes(unquote(object_classes))
-        @unique_identifier   unquote(unique_identifier) || hd(@required_attributes)
 
-        def unique_identifier(_),   do: @unique_identifier
+        def unique_identifier(_),   do: unquote(unique_identifier)
         def object_classes(_),      do: unquote(object_classes)
-        def required_attributes(_), do: @required_attributes
+        def required_attributes(_), do: unquote(required_attributes)
         def location(_),            do: unquote(location)
         def generators(_),          do: unquote(generators)
       end
