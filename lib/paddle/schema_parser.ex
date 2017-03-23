@@ -5,6 +5,10 @@ defmodule Paddle.SchemaParser do
 
   require Logger
 
+  for file <- Paddle.config(:schema_files) do
+    @external_resource file
+  end
+
   @definitions Paddle.config(:schema_files)
                |> Enum.flat_map(fn file ->
                  Logger.info "Loading #{file}"

@@ -144,33 +144,6 @@ defmodule Paddle.Class.Helper do
   documentation](#module-manually-describing-the-class)).
   """
   defmacro gen_class(class_name, options) do
-    quoted_gen_class(class_name, options)
-  end
-
-  @doc ~S"""
-  Generate a Paddle class from schema files.
-
-  Generate a Paddle class from one of the schema files passed as configuration
-  with the name `class_name`, with the given `object_classes` (can be a binary
-  or a list of binary), at the given location, optionally force specify
-  which field to use as a unique identifier (see
-  `Paddle.Class.unique_identifier/1`), and some optional generators (see
-  `Paddle.Class.generators/1`)
-  """
-  defmacro gen_class_from_schema(class_name, object_classes, location, unique_identifier \\ nil, generators \\ []) do
-    fields              = Paddle.SchemaParser.attributes(object_classes)
-    required_attributes = Paddle.SchemaParser.required_attributes(object_classes)
-    unique_identifier   = unique_identifier || hd(required_attributes)
-
-    quoted_gen_class(class_name, fields: fields,
-                                 unique_identifier: unique_identifier,
-                                 object_classes: object_classes,
-                                 required_attributes: required_attributes,
-                                 location: location,
-                                 generators: generators)
-  end
-
-  defp quoted_gen_class(class_name, options) do
     fields              = Keyword.get(options, :fields)
     unique_identifier   = Keyword.get(options, :unique_identifier)
     object_classes      = Keyword.get(options, :object_classes)
@@ -187,6 +160,43 @@ defmodule Paddle.Class.Helper do
         def unique_identifier(_),   do: unquote(unique_identifier)
         def object_classes(_),      do: unquote(object_classes)
         def required_attributes(_), do: unquote(required_attributes)
+        def location(_),            do: unquote(location)
+        def generators(_),          do: unquote(generators)
+      end
+    end
+  end
+
+  @doc ~S"""
+  Generate a Paddle class from schema files.
+
+  Generate a Paddle class from one of the schema files passed as configuration
+  with the name `class_name`, with the given `object_classes` (can be a binary
+  or a list of binary), at the given location, optionally force specify
+  which field to use as a unique identifier (see
+  `Paddle.Class.unique_identifier/1`), and some optional generators (see
+  `Paddle.Class.generators/1`)
+  """
+  defmacro gen_class_from_schema(class_name, object_classes, location, unique_identifier \\ nil, generators \\ []) do
+    {class_name,        _bindings} = Code.eval_quoted(class_name,        [], __CALLER__)
+    {object_classes,    _bindings} = Code.eval_quoted(object_classes,    [], __CALLER__)
+    {location,          _bindings} = Code.eval_quoted(location,          [], __CALLER__)
+    {unique_identifier, _bindings} = Code.eval_quoted(unique_identifier, [], __CALLER__)
+    {generators,        _bindings} = Code.eval_quoted(generators,        [], __CALLER__)
+
+    quote do
+      defmodule unquote(class_name) do
+        @fields              Paddle.SchemaParser.attributes(unquote(object_classes))
+
+        defstruct @fields
+      end
+
+      defimpl Paddle.Class, for: unquote(class_name) do
+        @required_attributes Paddle.SchemaParser.required_attributes(unquote(object_classes))
+        @unique_identifier   unquote(unique_identifier) || hd(@required_attributes)
+
+        def unique_identifier(_),   do: @unique_identifier
+        def object_classes(_),      do: unquote(object_classes)
+        def required_attributes(_), do: @required_attributes
         def location(_),            do: unquote(location)
         def generators(_),          do: unquote(generators)
       end

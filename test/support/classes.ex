@@ -17,7 +17,7 @@ Helper.gen_class_from_schema(MyApp.PosixGroup,
 
 defmodule MyApp.Class.Generators do
   @moduledoc ~S"""
-  Class used to aggregate the generators of Paddle's provided object classes.
+  Class used to aggregate the generators of MyApp's provided object classes.
   """
 
   @spec get_next_uid(Paddle.Class.t) :: integer
