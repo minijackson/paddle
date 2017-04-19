@@ -21,8 +21,10 @@ defmodule Paddle do
     Defaults to `false`.
   - `:port` -- The port the LDAP server listen to. Defaults to `389`.
   - `:account_subdn` -- The DN (without the base) where the accounts are
-    located. Used by the `Paddle.authenticate/2` function.  Defaults to
+    located. Used by the `Paddle.authenticate/2` function. Defaults to
     `"ou=People"`.
+  - `:account_identifier` -- The identifier by which users are identified.
+    Defaults to `:uid`.
   - `:schema_files` -- Files which are to be parsed to help generate classes
     using
     [`Paddle.Class.Helper`](Paddle.Class.Helper.html#module-using-schema-files).
@@ -240,8 +242,8 @@ defmodule Paddle do
   Check the given credentials.
 
   The user id can be given a binary, which will expand to
-  `uid=<id>,<account subdn>,<base>`, or with a keyword list if you want to
-  specify the whole DN (but still without the base).
+  `<account_identifier>=<id>,<account subdn>,<base>`, or with a keyword list if
+  you want to specify the whole DN (but still without the base).
 
   Example:
 
@@ -258,7 +260,7 @@ defmodule Paddle do
   end
 
   def authenticate(username, password) do
-    dn = Parsing.construct_dn([uid: username], config(:account_base))
+    dn = Parsing.construct_dn([{config(:account_identifier), username}], config(:account_base))
     GenServer.call(Paddle, {:authenticate, dn, String.to_charlist(password)})
   end
 
@@ -578,13 +580,14 @@ defmodule Paddle do
   Get the environment configuration of the Paddle application under a
   certain key.
   """
-  def config(:host),          do: Keyword.get(config(), :host)           |> String.to_charlist
-  def config(:ssl),           do: config(:ssl, false)
-  def config(:port),          do: config(:port, 389)
-  def config(:base),          do: config(:base, "")                      |> String.to_charlist
-  def config(:account_base),  do: config(:account_subdn) ++ ',' ++ config(:base)
-  def config(:account_subdn), do: config(:account_subdn, "ou=People")    |> String.to_charlist
-  def config(:schema_files),  do: config(:schema_files, [])
+  def config(:host),               do: Keyword.get(config(), :host)           |> String.to_charlist
+  def config(:ssl),                do: config(:ssl, false)
+  def config(:port),               do: config(:port, 389)
+  def config(:base),               do: config(:base, "")                      |> String.to_charlist
+  def config(:account_base),       do: config(:account_subdn) ++ ',' ++ config(:base)
+  def config(:account_subdn),      do: config(:account_subdn, "ou=People")    |> String.to_charlist
+  def config(:account_identifier), do: config(:account_identifier, :uid)
+  def config(:schema_files),       do: config(:schema_files, [])
 
   @spec config(atom, any) :: any
 

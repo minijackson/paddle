@@ -193,7 +193,6 @@ defmodule Paddle.Class.Helper do
       end
 
       defimpl Paddle.Class, for: unquote(class_name) do
-
         def unique_identifier(_),   do: unquote(unique_identifier)
         def object_classes(_),      do: unquote(object_classes)
         def required_attributes(_), do: unquote(required_attributes)
