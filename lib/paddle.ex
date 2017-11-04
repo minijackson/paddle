@@ -174,8 +174,7 @@ defmodule Paddle do
 
     case status do
       :ok -> {:reply, status, ldap_conn}
-      {:error, :invalidCredentials} -> {:reply, status, ldap_conn}
-      {:error, :anonymous_auth} -> {:reply, status, ldap_conn}
+      {:error, _} -> {:reply, status, ldap_conn}
     end
   end
 
@@ -236,12 +235,18 @@ defmodule Paddle do
     {:reply, :eldap.modify(ldap_conn, dn, mods), ldap_conn}
   end
 
-  @spec authenticate(keyword | binary, binary) :: boolean
+  @type authenticate_ldap_error :: :operationsError | :protocolError |
+  :authMethodNotSupported | :strongAuthRequired | :referral |
+  :saslBindInProgress | :inappropriateAuthentication | :invalidCredentials |
+  :unavailable
+  @spec authenticate(keyword | binary, binary) :: :ok | {:error, authenticate_ldap_error}
 
   @doc ~S"""
-  Check the given credentials.
+  Check the given credentials and authenticate the current connection.
 
-  The user id can be given a binary, which will expand to
+  When given the wrong credentials, returns `{:error, :invalidCredentials}`
+
+  The user id can be passed as a binary, which will expand to
   `<account_identifier>=<id>,<account subdn>,<base>`, or with a keyword list if
   you want to specify the whole DN (but still without the base).
 

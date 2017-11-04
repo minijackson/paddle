@@ -26,7 +26,7 @@ suited me:
 - [Exldap](https://github.com/jmerriweather/exldap) and
   [LDAPEx](https://github.com/OvermindDL1/ldap_ex) are both a translation of
   the LDAP `:eldap` in Elixir, which is nice, but are still missing some
-  higher-level functionalities.
+  higher-level features.
 
 ## Usage
 
