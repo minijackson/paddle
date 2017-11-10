@@ -148,7 +148,7 @@ defmodule Paddle do
 
     Logger.info("Connecting to ldap#{if ssl, do: "s"}://#{host}:#{port}")
 
-    {:ok, ldap_conn} = :eldap.open([host], ssl: ssl, port: port)
+    {:ok, ldap_conn} = :eldap.open([host], ssl: ssl, port: port, log: &eldap_log_callback/3)
     :eldap.controlling_process(ldap_conn, self())
     Logger.info("Connected to LDAP")
     {:ok, ldap_conn}
@@ -169,7 +169,7 @@ defmodule Paddle do
   end
 
   def handle_call({:authenticate, dn, password}, _from, ldap_conn) do
-    Logger.debug "Checking credentials with dn: #{dn}"
+    Logger.debug "Authenticating with dn: #{dn}"
     status = :eldap.simple_bind(ldap_conn, dn, password)
 
     case status do
@@ -182,7 +182,7 @@ defmodule Paddle do
     dn     = Parsing.construct_dn(kwdn, config(base))
     filter = Filters.construct_filter(filter)
 
-    Logger.debug("Getting entries with dn: #{dn} and filter: #{inspect filter}")
+    Logger.debug("Getting entries with dn: #{dn} and filter: #{inspect filter, pretty: true}")
 
     {:reply,
      :eldap.search(ldap_conn, base: dn, filter: filter)
@@ -194,7 +194,7 @@ defmodule Paddle do
     dn     = Parsing.construct_dn(kwdn, config(base))
     filter = Filters.construct_filter(filter)
 
-    Logger.debug("Getting single entry with dn: #{dn} and filter: #{inspect filter}")
+    Logger.debug("Getting single entry with dn: #{dn} and filter: #{inspect filter, pretty: true}")
 
     {:reply,
      :eldap.search(ldap_conn,
@@ -221,6 +221,8 @@ defmodule Paddle do
   def handle_call({:delete, kwdn, base}, _from, ldap_conn) do
     dn = Parsing.construct_dn(kwdn, config(base))
 
+    Logger.info("Deleting entry with dn: #{dn}")
+
     {:reply, :eldap.delete(ldap_conn, dn), ldap_conn}
   end
 
@@ -230,7 +232,6 @@ defmodule Paddle do
     Logger.info("Modifying entry: \"#{dn}\" with mods: #{inspect mods}")
 
     mods = mods |> Enum.map(&Parsing.mod_convert/1)
-    Logger.debug("Mods translated in :eldap form: #{inspect mods}")
 
     {:reply, :eldap.modify(ldap_conn, dn, mods), ldap_conn}
   end
@@ -238,7 +239,7 @@ defmodule Paddle do
   @type authenticate_ldap_error :: :operationsError | :protocolError |
   :authMethodNotSupported | :strongAuthRequired | :referral |
   :saslBindInProgress | :inappropriateAuthentication | :invalidCredentials |
-  :unavailable
+  :unavailable | :anonymous_auth
   @spec authenticate(keyword | binary, binary) :: :ok | {:error, authenticate_ldap_error}
 
   @doc ~S"""
@@ -639,5 +640,17 @@ defmodule Paddle do
 
   defp ensure_single_result({:ok, []}), do: {:error, :noSuchObject}
   defp ensure_single_result({:ok, [result]}), do: {:ok, result}
+
+  @spec eldap_log_callback(pos_integer(), charlist(), [term()]) :: :ok
+
+  @doc false
+  def eldap_log_callback(level, format_string, format_args) do
+    message = :io_lib.format(format_string, format_args)
+    case level do
+      # Level 1 seems unused by :eldap
+      1 -> Logger.info(message)
+      2 -> Logger.debug(message)
+    end
+  end
 
 end
