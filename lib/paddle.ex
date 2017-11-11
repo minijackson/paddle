@@ -106,6 +106,7 @@ defmodule Paddle do
   @type ldap_entry :: %{required(binary) => binary}
   @type auth_status :: :ok | {:error, atom}
 
+  @type dn :: keyword | binary
   @type eldap_dn :: charlist
   @type eldap_entry :: {:eldap_entry, eldap_dn, [{charlist, [charlist]}]}
 
@@ -132,6 +133,7 @@ defmodule Paddle do
   handle and keep the state, which is in this case the ldap connection, and
   pass it we we need it.
   """
+  @impl GenServer
   def init(:ok) do
     ssl  = config(:ssl)
     host = config(:host)
@@ -154,11 +156,21 @@ defmodule Paddle do
 
   Called by GenServer when the process is stopped.
   """
+  @impl GenServer
   def terminate(_reason, ldap_conn) do
     :eldap.close(ldap_conn)
     Logger.info("Stopped LDAP")
   end
 
+  @spec handle_call({:authenticate, charlist, charlist} |
+                    {:get, Paddle.Filters.t, dn, atom} |
+                    {:get_single, Paddle.Filters.t, dn, atom} |
+                    {:add, dn, attributes, atom} |
+                    {:delete, dn, atom} |
+                    {:modify, dn, atom, [mod]}, GenServer.from, ldap_conn) ::
+                    {:reply, term, ldap_conn}
+
+  @impl GenServer
   def handle_call({:authenticate, dn, password}, _from, ldap_conn) do
     Logger.debug "Authenticating with dn: #{dn}"
     status = :eldap.simple_bind(ldap_conn, dn, password)
@@ -169,6 +181,7 @@ defmodule Paddle do
     end
   end
 
+  @impl GenServer
   def handle_call({:get, filter, kwdn, base}, _from, ldap_conn) do
     dn     = Parsing.construct_dn(kwdn, config(base))
     filter = Filters.construct_filter(filter)
@@ -181,6 +194,7 @@ defmodule Paddle do
      ldap_conn}
   end
 
+  @impl GenServer
   def handle_call({:get_single, filter, kwdn, base}, _from, ldap_conn) do
     dn     = Parsing.construct_dn(kwdn, config(base))
     filter = Filters.construct_filter(filter)
@@ -197,6 +211,7 @@ defmodule Paddle do
      ldap_conn}
   end
 
+  @impl GenServer
   def handle_call({:add, kwdn, attributes, base}, _from, ldap_conn) do
     dn = Parsing.construct_dn(kwdn, config(base))
 
@@ -209,6 +224,7 @@ defmodule Paddle do
     {:reply, :eldap.add(ldap_conn, dn, attributes), ldap_conn}
   end
 
+  @impl GenServer
   def handle_call({:delete, kwdn, base}, _from, ldap_conn) do
     dn = Parsing.construct_dn(kwdn, config(base))
 
@@ -217,6 +233,7 @@ defmodule Paddle do
     {:reply, :eldap.delete(ldap_conn, dn), ldap_conn}
   end
 
+  @impl GenServer
   def handle_call({:modify, kwdn, base, mods}, _from, ldap_conn) do
     dn = Parsing.construct_dn(kwdn, config(base))
 
@@ -231,7 +248,7 @@ defmodule Paddle do
   :authMethodNotSupported | :strongAuthRequired | :referral |
   :saslBindInProgress | :inappropriateAuthentication | :invalidCredentials |
   :unavailable | :anonymous_auth
-  @spec authenticate(keyword | binary, binary) :: :ok | {:error, authenticate_ldap_error}
+  @spec authenticate(dn, binary) :: :ok | {:error, authenticate_ldap_error}
 
   @doc ~S"""
   Check the given credentials and authenticate the current connection.
@@ -293,7 +310,7 @@ defmodule Paddle do
   @type search_ldap_error :: :noSuchObject | :sizeLimitExceeded |
   :timeLimitExceeded | :undefinedAttributeType | :insufficientAccessRights
 
-  @spec get(keyword) :: {:ok, [ldap_entry]} | {:error, search_ldap_error}
+  @spec get(dn) :: {:ok, [ldap_entry]} | {:error, search_ldap_error}
 
   @doc ~S"""
   Get one or more LDAP entries given a partial DN and a filter.
@@ -387,7 +404,7 @@ defmodule Paddle do
     end
   end
 
-  @spec get!(keyword) :: [ldap_entry]
+  @spec get!(dn) :: [ldap_entry]
 
   @doc ~S"""
   Same as `get/1` but throws in case of an error.
@@ -407,7 +424,7 @@ defmodule Paddle do
     result
   end
 
-  @spec get_single(keyword) :: {:ok, ldap_entry} | {:error, search_ldap_error}
+  @spec get_single(dn) :: {:ok, ldap_entry} | {:error, search_ldap_error}
 
   @doc ~S"""
   Get a single LDAP entry given an optional partial DN and an optional filter.
@@ -439,7 +456,7 @@ defmodule Paddle do
   :invalidAttributeSyntax | :noSuchObject | :insufficientAccessRights |
   :entryAlreadyExists
 
-  @spec add(keyword, attributes) :: :ok | {:error, add_ldap_error}
+  @spec add(dn, attributes) :: :ok | {:error, add_ldap_error}
 
   @doc ~S"""
   Add an entry to the LDAP given a DN and a list of
@@ -487,7 +504,7 @@ defmodule Paddle do
   @type delete_ldap_error :: :noSuchObject | :notAllowedOnNonLeaf |
   :insufficientAccessRights
 
-  @spec delete(Paddle.Class.t | keyword) :: :ok | {:error, delete_ldap_error}
+  @spec delete(Paddle.Class.t | dn) :: :ok | {:error, delete_ldap_error}
 
   @doc ~S"""
   Delete a LDAP entry given a DN or a class object.
@@ -523,7 +540,7 @@ defmodule Paddle do
   :notAllowedOnRDN | :objectClassViolation | :objectClassModsProhibited |
   :insufficientAccessRights
 
-  @spec modify(Paddle.Class.t | keyword, mod) :: :ok | {:error, modify_ldap_error}
+  @spec modify(Paddle.Class.t | dn, [mod]) :: :ok | {:error, modify_ldap_error}
 
   @doc ~S"""
   Modify an LDAP entry given a DN or a class object and a list of
@@ -567,7 +584,7 @@ defmodule Paddle do
   @spec config :: keyword
 
   @doc ~S"""
-  Get the environment whole configuration of the Paddle application.
+  Get the whole configuration of the Paddle application.
   """
   def config, do: Application.get_env(:paddle, Paddle)
 
@@ -632,7 +649,7 @@ defmodule Paddle do
   defp ensure_single_result({:ok, []}), do: {:error, :noSuchObject}
   defp ensure_single_result({:ok, [result]}), do: {:ok, result}
 
-  @spec eldap_log_callback(pos_integer(), charlist(), [term()]) :: :ok
+  @spec eldap_log_callback(pos_integer, charlist, [term]) :: :ok
 
   @doc false
   def eldap_log_callback(level, format_string, format_args) do
