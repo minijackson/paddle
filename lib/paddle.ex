@@ -102,13 +102,11 @@ defmodule Paddle do
   alias Paddle.Filters
   alias Paddle.Attributes
 
-  @type ldap_conn :: :eldap.handle
+  @typep ldap_conn :: :eldap.handle
   @type ldap_entry :: %{required(binary) => binary}
   @type auth_status :: :ok | {:error, atom}
 
   @type dn :: keyword | binary
-  @type eldap_dn :: charlist
-  @type eldap_entry :: {:eldap_entry, eldap_dn, [{charlist, [charlist]}]}
 
   unless Application.get_env(:paddle, __MODULE__) do
     raise """
@@ -126,13 +124,6 @@ defmodule Paddle do
 
   @spec init(:ok) :: {:ok, ldap_conn}
 
-  @doc ~S"""
-  Init the LDAP connection.
-
-  This is called by the `GenServer.start_link/3` function. GenServer will then
-  handle and keep the state, which is in this case the ldap connection, and
-  pass it we we need it.
-  """
   @impl GenServer
   def init(:ok) do
     ssl  = config(:ssl)
@@ -151,11 +142,6 @@ defmodule Paddle do
 
   @spec terminate(reason, ldap_conn) :: :ok
 
-  @doc ~S"""
-  Terminate the LDAP connection.
-
-  Called by GenServer when the process is stopped.
-  """
   @impl GenServer
   def terminate(_reason, ldap_conn) do
     :eldap.close(ldap_conn)
@@ -190,7 +176,7 @@ defmodule Paddle do
 
     {:reply,
      :eldap.search(ldap_conn, base: dn, filter: filter)
-     |> clean_eldap_search_results,
+     |> Parsing.clean_eldap_search_results,
      ldap_conn}
   end
 
@@ -206,7 +192,7 @@ defmodule Paddle do
                    base: dn,
                    scope: :eldap.baseObject,
                    filter: filter)
-      |> clean_eldap_search_results
+      |> Parsing.clean_eldap_search_results
       |> ensure_single_result,
      ldap_conn}
   end
@@ -400,7 +386,7 @@ defmodule Paddle do
     with {:ok, result} <- GenServer.call(Paddle, {:get, filter, location, :base}) do
       {:ok,
        result
-       |> Enum.map(&entry_to_struct(&1, object))}
+       |> Enum.map(&Parsing.entry_to_class_object(&1, object))}
     end
   end
 
@@ -462,9 +448,9 @@ defmodule Paddle do
   Add an entry to the LDAP given a DN and a list of
   attributes.
 
-  The first argument is the DN given as a string or keyword list as usual.
-  The second argument is the list of attributes in the new entry as a keyword
-  list like so:
+  The first argument is the DN given as a string or keyword list. The second
+  argument is the list of attributes in the new entry as a keyword list like
+  so:
 
       [objectClass: ["account", "posixAccount"],
        cn: "User",
@@ -609,33 +595,6 @@ defmodule Paddle do
   Same as `config/1` but allows you to specify a default value.
   """
   def config(key, default), do: Keyword.get(config(), key, default)
-
-  @spec clean_eldap_search_results({:ok, {:eldap_search_result, [eldap_entry]}}
-                                   | {:error, atom})
-  :: {:ok, [ldap_entry]} | {:error, :noSuchObject}
-
-  defp clean_eldap_search_results({:error, error}) do
-    case error do
-      :noSuchObject -> {:error, :noSuchObject}
-    end
-  end
-
-  defp clean_eldap_search_results({:ok, {:eldap_search_result, [], []}}) do
-    {:error, :noSuchObject}
-  end
-
-  defp clean_eldap_search_results({:ok, {:eldap_search_result, entries, []}}) do
-    {:ok, Parsing.clean_entries(entries)}
-  end
-
-  defp entry_to_struct(entry, target) do
-    entry = entry
-            |> Map.drop(["dn", "objectClass"])
-            |> Enum.map(fn {key, value} -> {String.to_atom(key), value} end)
-            |> Enum.into(%{})
-
-    Map.merge(target, entry)
-  end
 
   @spec ensure_single_result({:ok, [ldap_entry]} | {:error, atom})
   :: {:ok, ldap_entry} | {:error, :noSuchObject}

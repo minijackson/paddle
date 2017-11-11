@@ -1,6 +1,7 @@
 defmodule Paddle.Parsing do
   @moduledoc ~S"""
-  Module used to parse dn and other LDAP related stuffs.
+  Module composed of utility functions for translating between `:eldap` and
+  `Paddle` representation.
   """
 
   # =====================
@@ -108,6 +109,70 @@ defmodule Paddle.Parsing do
   end
 
   def ldap_escape(token), do: ldap_escape(String.to_charlist(token))
+
+  # =============
+  # == Entries ==
+  # =============
+
+  @type eldap_dn :: charlist
+  @type eldap_entry :: {:eldap_entry, eldap_dn, [{charlist, [charlist]}]}
+
+  @spec clean_eldap_search_results(
+    {:ok, {:eldap_search_result, [eldap_entry]}}
+    | {:error, atom}
+  ) :: {:ok, [Paddle.ldap_entry]} | {:error, Paddle.search_ldap_error}
+
+  @doc ~S"""
+  Convert an `:eldap` search result to a `Paddle` representation.
+
+  Also see `clean_entries/1`
+
+  Examples:
+
+      iex> eldap_entry = {:eldap_entry, 'uid=testuser,ou=People', [{'uid', ['testuser']}]}
+      iex> Paddle.Parsing.clean_eldap_search_results({:ok, {:eldap_search_result, [eldap_entry], []}})
+      {:ok, [%{"dn" => "uid=testuser,ou=People", "uid" => ["testuser"]}]}
+
+      iex> Paddle.Parsing.clean_eldap_search_results({:ok, {:eldap_search_result, [], []}})
+      {:error, :noSuchObject}
+
+      iex> Paddle.Parsing.clean_eldap_search_results({:error, :insufficientAccessRights})
+      {:error, :insufficientAccessRights}
+  """
+  def clean_eldap_search_results({:error, error}) do
+    {:error, error}
+  end
+
+  def clean_eldap_search_results({:ok, {:eldap_search_result, [], []}}) do
+    {:error, :noSuchObject}
+  end
+
+  def clean_eldap_search_results({:ok, {:eldap_search_result, entries, []}}) do
+    {:ok, clean_entries(entries)}
+  end
+
+  @spec entry_to_class_object(eldap_entry, Paddle.Class.t) :: Paddle.Class.t
+
+  @doc ~S"""
+  Convert a `Paddle` entry to a given `Paddle` class object.
+
+  Example:
+
+      iex> entry = %{"dn" => "uid=testuser,ou=People", "uid" => ["testuser"], "description" => ["hello"]}
+      iex> Paddle.Parsing.entry_to_class_object(entry, %MyApp.PosixAccount{})
+      %MyApp.PosixAccount{cn: nil, description: ["hello"], gecos: nil,
+        gidNumber: nil, homeDirectory: nil, host: nil, l: nil,
+        loginShell: nil, o: nil, ou: nil, seeAlso: nil, uid: ["testuser"],
+        uidNumber: nil, userPassword: nil}
+  """
+  def entry_to_class_object(entry, target) do
+    entry = entry
+            |> Map.drop(["dn", "objectClass"])
+            |> Enum.map(fn {key, value} -> {String.to_atom(key), value} end)
+            |> Enum.into(%{})
+
+    Map.merge(target, entry)
+  end
 
   @spec clean_entries([Paddle.eldap_entry]) :: [Paddle.ldap_entry]
 
