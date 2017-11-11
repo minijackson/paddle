@@ -21,7 +21,7 @@ defmodule Paddle.Mixfile do
   # Type "mix help compile.app" for more information
   def application do
     [applications: [:logger, :eldap, :ssl],
-     mod: {Paddle, []}]
+     mod: {Paddle.Application, []}]
   end
 
   # Dependencies can be Hex packages:

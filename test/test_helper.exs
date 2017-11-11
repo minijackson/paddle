@@ -1,2 +1,2 @@
-Paddle.start_link()
+Paddle.start_link([])
 ExUnit.start()

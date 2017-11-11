@@ -116,19 +116,10 @@ defmodule Paddle do
     """
   end
 
-  def start(_type, _args) do
-    __MODULE__.start_link
-  end
+  @spec start_link(term) :: Genserver.on_start
 
-  @spec start_link() :: Genserver.on_start
-
-  @doc ~S"""
-  Start the LDAP process.
-
-  This function is called by the supervisor handled by the main application
-  in `MyApplication.start/2`.
-  """
-  def start_link() do
+  @doc false
+  def start_link(_args) do
     GenServer.start_link(__MODULE__, :ok, name: __MODULE__)
   end
 
