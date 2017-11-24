@@ -14,7 +14,7 @@ defprotocol Paddle.Class do
   `Paddle.PosixAccount` and `Paddle.PosixGroup`.
   """
 
-  @spec unique_identifier(Paddle.Class) :: atom
+  @spec unique_identifier(Paddle.Class.t) :: atom
 
   @doc ~S"""
   Return the name of the attribute used in the DN to uniquely identify entries.
@@ -24,7 +24,7 @@ defprotocol Paddle.Class do
   """
   def unique_identifier(_)
 
-  @spec object_classes(Paddle.Class) :: binary | [binary]
+  @spec object_classes(Paddle.Class.t) :: binary | [binary]
 
   @doc ~S"""
   Must return the class or the list of classes which this "object class"
@@ -37,7 +37,7 @@ defprotocol Paddle.Class do
   """
   def object_classes(_)
 
-  @spec required_attributes(Paddle.Class) :: [atom]
+  @spec required_attributes(Paddle.Class.t) :: [atom]
 
   @doc ~S"""
   Return the list of required attributes for this "class"
@@ -49,7 +49,7 @@ defprotocol Paddle.Class do
   """
   def required_attributes(_)
 
-  @spec location(Paddle.Class) :: binary | keyword
+  @spec location(Paddle.Class.t) :: binary | keyword
 
   @doc ~S"""
   Return the parent subDN (where to add / get entries of this type).
@@ -60,7 +60,7 @@ defprotocol Paddle.Class do
   """
   def location(_)
 
-  @spec generators(Paddle.Class) :: [{atom, ((Paddle.Class) -> term)}]
+  @spec generators(Paddle.Class.t) :: [{atom, ((Paddle.Class) -> term)}]
 
   @doc ~S"""
   Return a list of attributes to be generated using the given functions.

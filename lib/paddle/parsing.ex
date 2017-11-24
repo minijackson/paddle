@@ -151,7 +151,7 @@ defmodule Paddle.Parsing do
     {:ok, clean_entries(entries)}
   end
 
-  @spec entry_to_class_object(eldap_entry, Paddle.Class.t) :: Paddle.Class.t
+  @spec entry_to_class_object(Paddle.ldap_entry, Paddle.Class.t) :: Paddle.Class.t
 
   @doc ~S"""
   Convert a `Paddle` entry to a given `Paddle` class object.
@@ -174,7 +174,7 @@ defmodule Paddle.Parsing do
     Map.merge(target, entry)
   end
 
-  @spec clean_entries([Paddle.eldap_entry]) :: [Paddle.ldap_entry]
+  @spec clean_entries([eldap_entry]) :: [Paddle.ldap_entry]
 
   @doc ~S"""
   Get a binary map representation of several eldap entries.
@@ -189,7 +189,7 @@ defmodule Paddle.Parsing do
     |> Enum.map(&clean_entry/1)
   end
 
-  @spec clean_entry(Paddle.eldap_entry) :: Paddle.ldap_entry
+  @spec clean_entry(eldap_entry) :: Paddle.ldap_entry
 
   @doc ~S"""
   Get a binary map representation of a single eldap entry.
