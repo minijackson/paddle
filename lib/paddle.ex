@@ -12,14 +12,21 @@ defmodule Paddle do
         base: "dc=myorganisation,dc=org",
         ssl: true,
         port: 636,
+        timeout: 3000,
         account_subdn: "ou=People",
         schema_files: Path.wildcard("/etc/openldap/schema/*.schema")
 
-  - `:host` -- The host of the LDAP server. Mandatory
-  - `:base` -- The base DN.
+  - `:host` -- The host(s) containing the LDAP server(s). Mandatory. Can be a
+    bitstring for a single host, or a list of bitstrings, which will make
+    Paddle try to connect to each host in the specified order. See also the
+    `:timeout` option.
+  - `:base` -- The base DN. Defaults to `""`.
   - `:ssl` -- When set to `true`, use SSL to connect to the LDAP server.
     Defaults to `false`.
   - `:port` -- The port the LDAP server listen to. Defaults to `389`.
+  - `:timeout` -- The timeout in milliseconds, or `nil` for the default TCP
+    stack timeout value (which may be very long), for each request to the LDAP
+    server. Defaults to `nil`.
   - `:account_subdn` -- The DN (without the base) where the accounts are
     located. Used by the `Paddle.authenticate/2` function. Defaults to
     `"ou=People"`.
@@ -126,13 +133,25 @@ defmodule Paddle do
 
   @impl GenServer
   def init(:ok) do
-    ssl  = config(:ssl)
-    host = config(:host)
-    port = config(:port)
+    ssl     = config(:ssl)
+    host    = config(:host)
+    port    = config(:port)
+    timeout = config(:timeout)
 
-    Logger.info("Connecting to ldap#{if ssl, do: "s"}://#{host}:#{port}")
+    Logger.info("Connecting to ldap#{if ssl, do: "s"}://#{inspect host}:#{port}")
 
-    {:ok, ldap_conn} = :eldap.open([host], ssl: ssl, port: port, log: &eldap_log_callback/3)
+    options = [ssl: ssl,
+               port: port,
+               log: &eldap_log_callback/3]
+
+    options = if timeout do
+      Keyword.put(options, :timeout, timeout)
+    else
+      options
+    end
+
+    {:ok, ldap_conn} = :eldap.open(host, options)
+
     :eldap.controlling_process(ldap_conn, self())
     Logger.info("Connected to LDAP")
     {:ok, ldap_conn}
@@ -379,13 +398,15 @@ defmodule Paddle do
     fields_filter = object
                     |> Map.from_struct
                     |> Enum.filter(fn {_key, value} -> value != nil end)
-    filter = Filters.class_filter(Paddle.Class.object_classes(object))
+    filter = object
+             |> Paddle.Class.object_classes
+             |> Filters.class_filter
              |> Filters.merge_filter(fields_filter)
              |> Filters.merge_filter(additional_filter)
     location = Paddle.Class.location(object)
-    with {:ok, result} <- GenServer.call(Paddle, {:get, filter, location, :base}) do
+    with {:ok, entries} <- GenServer.call(Paddle, {:get, filter, location, :base}) do
       {:ok,
-       result
+       entries
        |> Enum.map(&Parsing.entry_to_class_object(&1, object))}
     end
   end
@@ -580,12 +601,18 @@ defmodule Paddle do
   Get the environment configuration of the Paddle application under a
   certain key.
   """
-  def config(:host),               do: Keyword.get(config(), :host)           |> String.to_charlist
+  def config(:host) do
+    case Keyword.get(config(), :host) do
+      host when is_bitstring(host) -> [String.to_charlist(host)]
+      hosts when is_list(hosts) -> Enum.map(hosts, &String.to_charlist/1)
+    end
+  end
   def config(:ssl),                do: config(:ssl, false)
   def config(:port),               do: config(:port, 389)
-  def config(:base),               do: config(:base, "")                      |> String.to_charlist
+  def config(:timeout),            do: config(:timeout, nil)
+  def config(:base),               do: config(:base, "")                   |> String.to_charlist
   def config(:account_base),       do: config(:account_subdn) ++ ',' ++ config(:base)
-  def config(:account_subdn),      do: config(:account_subdn, "ou=People")    |> String.to_charlist
+  def config(:account_subdn),      do: config(:account_subdn, "ou=People") |> String.to_charlist
   def config(:account_identifier), do: config(:account_identifier, :uid)
   def config(:schema_files),       do: config(:schema_files, [])
 
