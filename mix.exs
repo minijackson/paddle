@@ -3,7 +3,7 @@ defmodule Paddle.Mixfile do
 
   def project do
     [app: :paddle,
-     version: "0.1.2",
+     version: "0.1.3",
      description: "A library simplifying LDAP usage",
      elixir: "~> 1.3",
      build_embedded: Mix.env == :prod,
