@@ -91,9 +91,9 @@ defmodule Paddle.Class.Helper do
 
   ## Using schema files
 
-  The simplest way is to find `*.schema` files which are definitions of LDAP
-  object classes. You can find them in the `/etc/openldap/schema/` directory if
-  you have OpenLDAP installed. If not, you can find most of them
+  The simplest way is to find `*.schema` files which contain definitions of
+  LDAP object classes. You can find them in the `/etc/(open)ldap/schema/`
+  directory if you have OpenLDAP installed. If not, you can find most of them
   [here](https://www.openldap.org/devel/gitweb.cgi?p=openldap.git;a=tree;f=servers/slapd/schema;h=55325b541890a9210178920c78231d2e392b0e39;hb=HEAD).
   Then, add the path of these files in the Paddle configuration using the
   `:schema_files` key (see the [`Paddle`](Paddle.html#module-configuration)

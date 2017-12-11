@@ -12,6 +12,9 @@ defmodule Paddle do
         base: "dc=myorganisation,dc=org",
         ssl: true,
         port: 636,
+        ipv6: true,
+        tcpopts: [],
+        sslopts: [certfile: '/path/to/certificate.crt'],
         timeout: 3000,
         account_subdn: "ou=People",
         schema_files: Path.wildcard("/etc/openldap/schema/*.schema")
@@ -24,6 +27,15 @@ defmodule Paddle do
   - `:ssl` -- When set to `true`, use SSL to connect to the LDAP server.
     Defaults to `false`.
   - `:port` -- The port the LDAP server listen to. Defaults to `389`.
+  - `:ipv6` -- Connect to the LDAP server using IPv6. Defaults to `false`.
+  - `:tcpopts` -- Additionnal `:gen_tcp.connect/4` / `:ssl.connect/4` options.
+    Must not have the `:active`, `:binary`, `:deliver`, `:list`, `:mode` or
+    `:packet` options. See [`:gen_tcp`'s option
+    documentation](http://erlang.org/doc/man/gen_tcp.html#type-connect_option).
+    Defaults to `[]`.
+  - `:sslopts` -- Additionnal `:ssl.connect/4` options. Ineffective if the `:ssl`
+    option is set to `false`. See [`:ssl`'s option
+    documentation](http://erlang.org/doc/man/ssl.html).  Defaults to `[]`.
   - `:timeout` -- The timeout in milliseconds, or `nil` for the default TCP
     stack timeout value (which may be very long), for each request to the LDAP
     server. Defaults to `nil`.
@@ -134,14 +146,24 @@ defmodule Paddle do
   @impl GenServer
   def init(:ok) do
     ssl     = config(:ssl)
+    ipv6    = config(:ipv6)
+    tcpopts = config(:tcpopts)
+    sslopts = config(:sslopts)
     host    = config(:host)
     port    = config(:port)
     timeout = config(:timeout)
 
     Logger.info("Connecting to ldap#{if ssl, do: "s"}://#{inspect host}:#{port}")
 
+    tcpopts = if ipv6 do
+      [:inet6 | tcpopts]
+    else
+      tcpopts
+    end
+
     options = [ssl: ssl,
                port: port,
+               tcpopts: tcpopts,
                log: &eldap_log_callback/3]
 
     options = if timeout do
@@ -149,6 +171,14 @@ defmodule Paddle do
     else
       options
     end
+
+    options = if ssl do
+      Keyword.put(options, :sslopts, sslopts)
+    else
+      options
+    end
+
+    Logger.debug("Effective :eldap options: #{inspect options}")
 
     {:ok, ldap_conn} = :eldap.open(host, options)
 
@@ -608,6 +638,9 @@ defmodule Paddle do
     end
   end
   def config(:ssl),                do: config(:ssl, false)
+  def config(:ipv6),               do: config(:ipv6, false)
+  def config(:tcpopts),            do: config(:tcpopts, [])
+  def config(:sslopts),            do: config(:sslopts, [])
   def config(:port),               do: config(:port, 389)
   def config(:timeout),            do: config(:timeout, nil)
   def config(:base),               do: config(:base, "")                   |> String.to_charlist

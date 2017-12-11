@@ -6,4 +6,5 @@ config :paddle, Paddle,
   base: "dc=test,dc=com",
   ssl: false,
   port: 3389,
-  timeout: 100
+  timeout: 50,
+  ipv6: true
