@@ -7,4 +7,4 @@ config :paddle, Paddle,
   ssl: false,
   port: 3389,
   timeout: 50,
-  ipv6: true
+  ipv6: false
