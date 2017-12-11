@@ -19,35 +19,19 @@ defmodule Paddle do
         account_subdn: "ou=People",
         schema_files: Path.wildcard("/etc/openldap/schema/*.schema")
 
-  - `:host` -- The host(s) containing the LDAP server(s). Mandatory. Can be a
-    bitstring for a single host, or a list of bitstrings, which will make
-    Paddle try to connect to each host in the specified order. See also the
-    `:timeout` option.
-  - `:base` -- The base DN. Defaults to `""`.
-  - `:ssl` -- When set to `true`, use SSL to connect to the LDAP server.
-    Defaults to `false`.
-  - `:port` -- The port the LDAP server listen to. Defaults to `389`.
-  - `:ipv6` -- Connect to the LDAP server using IPv6. Defaults to `false`.
-  - `:tcpopts` -- Additionnal `:gen_tcp.connect/4` / `:ssl.connect/4` options.
-    Must not have the `:active`, `:binary`, `:deliver`, `:list`, `:mode` or
-    `:packet` options. See [`:gen_tcp`'s option
-    documentation](http://erlang.org/doc/man/gen_tcp.html#type-connect_option).
-    Defaults to `[]`.
-  - `:sslopts` -- Additionnal `:ssl.connect/4` options. Ineffective if the `:ssl`
-    option is set to `false`. See [`:ssl`'s option
-    documentation](http://erlang.org/doc/man/ssl.html).  Defaults to `[]`.
-  - `:timeout` -- The timeout in milliseconds, or `nil` for the default TCP
-    stack timeout value (which may be very long), for each request to the LDAP
-    server. Defaults to `nil`.
-  - `:account_subdn` -- The DN (without the base) where the accounts are
-    located. Used by the `Paddle.authenticate/2` function. Defaults to
-    `"ou=People"`.
-  - `:account_identifier` -- The identifier by which users are identified.
-    Defaults to `:uid`.
-  - `:schema_files` -- Files which are to be parsed to help generate classes
-    using
-    [`Paddle.Class.Helper`](Paddle.Class.Helper.html#module-using-schema-files).
-    Defaults to `[]`.
+  Option    | Description | Default
+  --------- | ----------- | -------
+  `:host`   | The host(s) containing the LDAP server(s). Can be a bitstring for a single host, or a list of bitstrings, which will make Paddle try to connect to each host in the specified order. See also the `:timeout` option. | **Mandatory**
+  `:base`   | The base DN. | `""`
+  `:ssl`    | When set to `true`, use SSL to connect to the LDAP server. | `false`
+  `:port`   | The port the LDAP server listen to. | `389`
+  `:ipv6`   | When set to `true`, connect to the LDAP server using IPv6. | `false`
+  `:tcpopts`| Additionnal `:gen_tcp.connect/4` / `:ssl.connect/4` options.  Must not have the `:active`, `:binary`, `:deliver`, `:list`, `:mode` or `:packet` options. See [`:gen_tcp`'s option documentation](http://erlang.org/doc/man/gen_tcp.html#type-connect_option).  | `[]`
+  `:sslopts`| Additionnal `:ssl.connect/4` options. Ineffective if the `:ssl` option is set to `false`. See [`:ssl`'s option documentation](http://erlang.org/doc/man/ssl.html).  | `[]`
+  `:timeout`| The timeout in milliseconds, or `nil` for the default TCP stack timeout value (which may be very long), for each request to the LDAP server. | `nil`
+  `:account_subdn` | The DN (without the base) where the accounts are located. Used by the `Paddle.authenticate/2` function. | `"ou=People"`
+  `:account_identifier` |  The identifier by which users are identified. Used by the `Paddle.authenticate/2` function. | `:uid`
+  `:schema_files` | Files which are to be parsed to help generate classes using [`Paddle.Class.Helper`](Paddle.Class.Helper.html#module-using-schema-files).  | `[]`
 
   ## Usage
 
@@ -292,7 +276,7 @@ defmodule Paddle do
 
   The user id can be passed as a binary, which will expand to
   `<account_identifier>=<id>,<account subdn>,<base>`, or with a keyword list if
-  you want to specify the whole DN (but still without the base).
+  you want to specify the whole DN (but still without the base DN).
 
   Example:
 
