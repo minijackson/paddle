@@ -202,20 +202,22 @@ defmodule Paddle do
 
   @impl GenServer
   def handle_call({:get, filter, kwdn, base}, _from, ldap_conn) do
-    dn     = Parsing.construct_dn(kwdn, config(base))
+    base = config(base)
+    dn     = Parsing.construct_dn(kwdn, base)
     filter = Filters.construct_filter(filter)
 
     Logger.debug("Getting entries with dn: #{dn} and filter: #{inspect filter, pretty: true}")
 
     {:reply,
      :eldap.search(ldap_conn, base: dn, filter: filter)
-     |> Parsing.clean_eldap_search_results,
+     |> Parsing.clean_eldap_search_results(base),
      ldap_conn}
   end
 
   @impl GenServer
   def handle_call({:get_single, filter, kwdn, base}, _from, ldap_conn) do
-    dn     = Parsing.construct_dn(kwdn, config(base))
+    base = config(base)
+    dn     = Parsing.construct_dn(kwdn, base)
     filter = Filters.construct_filter(filter)
 
     Logger.debug("Getting single entry with dn: #{dn} and filter: #{inspect filter, pretty: true}")
@@ -225,7 +227,7 @@ defmodule Paddle do
                    base: dn,
                    scope: :eldap.baseObject,
                    filter: filter)
-      |> Parsing.clean_eldap_search_results
+      |> Parsing.clean_eldap_search_results(base)
       |> ensure_single_result,
      ldap_conn}
   end
@@ -339,7 +341,7 @@ defmodule Paddle do
       iex> Paddle.get(base: [uid: "testuser", ou: "People"])
       {:ok,
        [%{"cn" => ["Test User"],
-         "dn" => "uid=testuser,ou=People,dc=test,dc=com",
+         "dn" => "uid=testuser,ou=People",
          "gecos" => ["Test User,,,,"], "gidNumber" => ["120"],
          "homeDirectory" => ["/home/testuser"],
          "loginShell" => ["/bin/bash"],
@@ -350,7 +352,7 @@ defmodule Paddle do
       iex> Paddle.get(base: "uid=testuser,ou=People")
       {:ok,
        [%{"cn" => ["Test User"],
-         "dn" => "uid=testuser,ou=People,dc=test,dc=com",
+         "dn" => "uid=testuser,ou=People",
          "gecos" => ["Test User,,,,"], "gidNumber" => ["120"],
          "homeDirectory" => ["/home/testuser"],
          "loginShell" => ["/bin/bash"],
@@ -364,7 +366,7 @@ defmodule Paddle do
       iex> Paddle.get(filter: [uid: "testuser"], base: [ou: "People"])
       {:ok,
        [%{"cn" => ["Test User"],
-         "dn" => "uid=testuser,ou=People,dc=test,dc=com",
+         "dn" => "uid=testuser,ou=People",
          "gecos" => ["Test User,,,,"], "gidNumber" => ["120"],
          "homeDirectory" => ["/home/testuser"],
          "loginShell" => ["/bin/bash"],
@@ -454,7 +456,7 @@ defmodule Paddle do
 
       iex> Paddle.get_single(base: [ou: "People"])
       {:ok,
-       %{"dn" => "ou=People,dc=test,dc=com",
+       %{"dn" => "ou=People",
         "objectClass" => ["top", "organizationalUnit"], "ou" => ["People"]}}
 
       iex> Paddle.get_single(filter: [uid: "nothing"])

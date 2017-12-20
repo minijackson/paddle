@@ -119,7 +119,8 @@ defmodule Paddle.Parsing do
 
   @spec clean_eldap_search_results(
     {:ok, {:eldap_search_result, [eldap_entry]}}
-    | {:error, atom}
+    | {:error, atom},
+    charlist
   ) :: {:ok, [Paddle.ldap_entry]} | {:error, Paddle.search_ldap_error}
 
   @doc ~S"""
@@ -130,25 +131,29 @@ defmodule Paddle.Parsing do
   Examples:
 
       iex> eldap_entry = {:eldap_entry, 'uid=testuser,ou=People', [{'uid', ['testuser']}]}
-      iex> Paddle.Parsing.clean_eldap_search_results({:ok, {:eldap_search_result, [eldap_entry], []}})
+      iex> Paddle.Parsing.clean_eldap_search_results({:ok, {:eldap_search_result, [eldap_entry], []}}, '')
       {:ok, [%{"dn" => "uid=testuser,ou=People", "uid" => ["testuser"]}]}
 
-      iex> Paddle.Parsing.clean_eldap_search_results({:ok, {:eldap_search_result, [], []}})
+      iex> Paddle.Parsing.clean_eldap_search_results({:ok, {:eldap_search_result, [], []}}, '')
       {:error, :noSuchObject}
 
-      iex> Paddle.Parsing.clean_eldap_search_results({:error, :insufficientAccessRights})
+      iex> Paddle.Parsing.clean_eldap_search_results({:error, :insufficientAccessRights}, '')
       {:error, :insufficientAccessRights}
+
+      iex> eldap_entry = {:eldap_entry, 'uid=testuser,ou=People', [{'uid', ['testuser']}]}
+      iex> Paddle.Parsing.clean_eldap_search_results({:ok, {:eldap_search_result, [eldap_entry], []}}, 'ou=People')
+      {:ok, [%{"dn" => "uid=testuser", "uid" => ["testuser"]}]}
   """
-  def clean_eldap_search_results({:error, error}) do
+  def clean_eldap_search_results({:error, error}, _base) do
     {:error, error}
   end
 
-  def clean_eldap_search_results({:ok, {:eldap_search_result, [], []}}) do
+  def clean_eldap_search_results({:ok, {:eldap_search_result, [], []}}, _base) do
     {:error, :noSuchObject}
   end
 
-  def clean_eldap_search_results({:ok, {:eldap_search_result, entries, []}}) do
-    {:ok, clean_entries(entries)}
+  def clean_eldap_search_results({:ok, {:eldap_search_result, entries, []}}, base) do
+    {:ok, clean_entries(entries, base)}
   end
 
   @spec entry_to_class_object(Paddle.ldap_entry, Paddle.Class.t) :: Paddle.Class.t
@@ -174,36 +179,55 @@ defmodule Paddle.Parsing do
     Map.merge(target, entry)
   end
 
-  @spec clean_entries([eldap_entry]) :: [Paddle.ldap_entry]
+  @spec clean_entries([eldap_entry], charlist) :: [Paddle.ldap_entry]
 
   @doc ~S"""
   Get a binary map representation of several eldap entries.
 
+  The `base` argument corresponds to the DN base which should be stripped from
+  the result's `"dn"` attribute.
+
   Example:
 
-      iex> Paddle.Parsing.clean_entries([{:eldap_entry, 'uid=testuser,ou=People', [{'uid', ['testuser']}]}])
+      iex> Paddle.Parsing.clean_entries([{:eldap_entry, 'uid=testuser,ou=People', [{'uid', ['testuser']}]}], '')
       [%{"dn" => "uid=testuser,ou=People", "uid" => ["testuser"]}]
+
+      iex> Paddle.Parsing.clean_entries([{:eldap_entry, 'uid=testuser,ou=People', [{'uid', ['testuser']}]}], 'ou=People')
+      [%{"dn" => "uid=testuser", "uid" => ["testuser"]}]
   """
-  def clean_entries(entries) do
+  def clean_entries(entries, base) do
+    base_length = length(base)
     entries
-    |> Enum.map(&clean_entry/1)
+    |> Enum.map(&(clean_entry(&1, base_length)))
   end
 
-  @spec clean_entry(eldap_entry) :: Paddle.ldap_entry
+  @spec clean_entry(eldap_entry, integer) :: Paddle.ldap_entry
 
   @doc ~S"""
   Get a binary map representation of a single eldap entry.
 
+  The `base_length` argument corresponds to the DN base length which should be
+  stripped from the result's `"dn"` attribute.
+
   Example:
 
-      iex> Paddle.Parsing.clean_entry({:eldap_entry, 'uid=testuser,ou=People', [{'uid', ['testuser']}]})
+      iex> Paddle.Parsing.clean_entry({:eldap_entry, 'uid=testuser,ou=People', [{'uid', ['testuser']}]}, 0)
       %{"dn" => "uid=testuser,ou=People", "uid" => ["testuser"]}
+
+      iex> Paddle.Parsing.clean_entry({:eldap_entry, 'uid=testuser,ou=People', [{'uid', ['testuser']}]}, 9)
+      %{"dn" => "uid=testuser", "uid" => ["testuser"]}
   """
-  def clean_entry({:eldap_entry, dn, attributes}) do
-    %{"dn" => List.to_string(dn)}
+  def clean_entry({:eldap_entry, dn, attributes}, base_length) do
+    %{"dn" => dn |> List.to_string |> strip_base_from_dn(base_length)}
     |> Map.merge(attributes
                  |> attributes_to_binary
                  |> Enum.into(%{}))
+  end
+
+  defp strip_base_from_dn(dn, 0) when is_binary(dn), do: dn
+  defp strip_base_from_dn(dn, base_length) when is_binary(dn) do
+    dn_length = String.length(dn)
+    String.slice(dn, 0, dn_length - base_length - 1)
   end
 
   # ===================
