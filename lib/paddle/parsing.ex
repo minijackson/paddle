@@ -30,30 +30,31 @@ defmodule Paddle.Parsing do
   reordered and because they can be mistaken for a class object (see
   `Paddle.Class`).
   """
+  def construct_dn(subdn, base) when is_binary(base) do
+    construct_dn(subdn, :binary.bin_to_list(base))
+  end
+
   def construct_dn(map, base \\ '')
 
   def construct_dn([], base) when is_list(base), do: base
-  def construct_dn([], base), do: String.to_charlist(base)
 
   def construct_dn(subdn, base) when is_binary(subdn) and is_list(base), do:
-    String.to_charlist(subdn) ++ ',' ++ base
-  def construct_dn(subdn, base) when is_binary(subdn), do:
-    String.to_charlist(subdn) ++ ',' ++ String.to_charlist(base)
+    :binary.bin_to_list(subdn) ++ ',' ++ base
 
   def construct_dn(nil, base) when is_list(base), do: base
-  def construct_dn(nil, base), do: String.to_charlist(base)
 
   def construct_dn(map, '') do
-    ',' ++ dn = map
-                |> Enum.reduce('', fn {key, value}, acc -> acc ++ ',#{key}=#{ldap_escape value}' end)
+    ',' ++ dn = Enum.reduce(map,
+                            '',
+                            fn {key, value}, acc ->
+                              acc ++ ',#{key}=#{ldap_escape value}'
+                            end)
     dn
   end
 
   def construct_dn(map, base) when is_list(base) do
     construct_dn(map, '') ++ ',' ++ base
   end
-
-  def construct_dn(map, base), do: construct_dn(map, String.to_charlist(base))
 
   @spec dn_to_kwlist(charlist | binary) :: [{binary, binary}]
 
@@ -108,7 +109,7 @@ defmodule Paddle.Parsing do
     escaped_char ++ ldap_escape(rest)
   end
 
-  def ldap_escape(token), do: ldap_escape(String.to_charlist(token))
+  def ldap_escape(token), do: ldap_escape(:binary.bin_to_list(token))
 
   # =============
   # == Entries ==
@@ -308,7 +309,7 @@ defmodule Paddle.Parsing do
 
   defp attribute_to_binary({key, values}) do
     {List.to_string(key),
-     values |> Enum.map(&List.to_string/1)}
+     values |> Enum.map(&:binary.list_to_bin/1)}
   end
 
 end

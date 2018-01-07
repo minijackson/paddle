@@ -46,3 +46,10 @@ objectClass: room
 commonName: meetingRoom
 roomNumber: 42
 description: The Room where meetings happens
+
+dn: commonName=ùnícödəR°°m,ou=Rooms,dc=test,dc=com
+objectClass: top
+objectClass: room
+commonName: ùnícödəR°°m
+roomNumber: 8
+description: The Room where ùnícödə happens 🏰

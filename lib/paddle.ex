@@ -291,12 +291,12 @@ defmodule Paddle do
   """
   def authenticate(kwdn, password) when is_list(kwdn) do
     dn = Parsing.construct_dn(kwdn, config(:base))
-    GenServer.call(Paddle, {:authenticate, dn, String.to_charlist(password)})
+    GenServer.call(Paddle, {:authenticate, dn, :binary.bin_to_list(password)})
   end
 
   def authenticate(username, password) do
     dn = Parsing.construct_dn([{config(:account_identifier), username}], config(:account_base))
-    GenServer.call(Paddle, {:authenticate, dn, String.to_charlist(password)})
+    GenServer.call(Paddle, {:authenticate, dn, :binary.bin_to_list(password)})
   end
 
   @spec get_dn(Paddle.Class.t) :: {:ok, binary} | {:error, :missing_unique_identifier}
@@ -589,6 +589,14 @@ defmodule Paddle do
                     add: {"description", "This is a description"},
                     delete: "gecos",
                     replace: {"o", ["Club *Nix", "Linux Foundation"]})
+
+  Or, using class objects:
+
+      Paddle.modify(%MyApp.PosixAccount{uid: "testuser"},
+                    add: {"description", "This is a description"},
+                    delete: "gecos",
+                    replace: {"o", ["Club *Nix", "Linux Foundation"]})
+
   """
   def modify(kwdn, mods) when is_list(kwdn) or is_binary(kwdn) do
     GenServer.call(Paddle, {:modify, kwdn, :base, mods})
@@ -629,9 +637,9 @@ defmodule Paddle do
   def config(:sslopts),            do: config(:sslopts, [])
   def config(:port),               do: config(:port, 389)
   def config(:timeout),            do: config(:timeout, nil)
-  def config(:base),               do: config(:base, "")                   |> String.to_charlist
+  def config(:base),               do: config(:base, "")                   |> :binary.bin_to_list
   def config(:account_base),       do: config(:account_subdn) ++ ',' ++ config(:base)
-  def config(:account_subdn),      do: config(:account_subdn, "ou=People") |> String.to_charlist
+  def config(:account_subdn),      do: config(:account_subdn, "ou=People") |> :binary.bin_to_list
   def config(:account_identifier), do: config(:account_identifier, :uid)
   def config(:schema_files),       do: config(:schema_files, [])
 
