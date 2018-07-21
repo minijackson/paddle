@@ -164,11 +164,15 @@ defmodule Paddle do
 
     Logger.debug("Effective :eldap options: #{inspect options}")
 
-    {:ok, ldap_conn} = :eldap.open(host, options)
-
-    :eldap.controlling_process(ldap_conn, self())
-    Logger.info("Connected to LDAP")
-    {:ok, ldap_conn}
+    case :eldap.open(host, options) do
+      {:ok, ldap_conn} ->
+        :eldap.controlling_process(ldap_conn, self())
+        Logger.info("Connected to LDAP")
+        {:ok, ldap_conn}
+      {:error, _reason} ->
+        Logger.info("Failed to connect to LDAP")
+        {:ok, :not_connected}
+    end
   end
 
   @type reason :: :normal | :shutdown | {:shutdown, term} | term
@@ -188,6 +192,11 @@ defmodule Paddle do
                     {:delete, dn, atom} |
                     {:modify, dn, atom, [mod]}, GenServer.from, ldap_conn) ::
                     {:reply, term, ldap_conn}
+
+  @impl GenServer
+  def handle_call(_message, _from, :not_connected) do
+    {:reply, {:error, :not_connected}, :not_connected}
+  end
 
   @impl GenServer
   def handle_call({:authenticate, dn, password}, _from, ldap_conn) do
