@@ -121,21 +121,21 @@ defmodule Paddle do
   @spec start_link(term) :: Genserver.on_start
 
   @doc false
-  def start_link(_args) do
-    GenServer.start_link(__MODULE__, :ok, name: __MODULE__)
+  def start_link(opts \\ []) do
+    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
-  @spec init(:ok) :: {:ok, ldap_conn}
+  @spec init([]) :: {:ok, ldap_conn}
 
   @impl GenServer
-  def init(:ok) do
-    ssl     = config(:ssl)
-    ipv6    = config(:ipv6)
-    tcpopts = config(:tcpopts)
-    sslopts = config(:sslopts)
-    host    = config(:host)
-    port    = config(:port)
-    timeout = config(:timeout)
+  def init(opts \\ []) do
+    ssl     = Keyword.get(opts, :ssl, config(:ssl))
+    ipv6    = Keyword.get(opts, :ipv6, config(:ipv6))
+    tcpopts = Keyword.get(opts, :tcpopts, config(:tcpopts))
+    sslopts = Keyword.get(opts, :sslopts, config(:sslopts))
+    host    = Keyword.get(opts, :host, config(:host))
+    port    = Keyword.get(opts, :port, config(:port))
+    timeout = Keyword.get(opts, :timeout, config(:timeout))
 
     Logger.info("Connecting to ldap#{if ssl, do: "s"}://#{inspect host}:#{port}")
 
