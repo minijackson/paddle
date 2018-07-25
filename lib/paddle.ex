@@ -152,12 +152,27 @@ defmodule Paddle do
   end
 
   @spec handle_call({:authenticate, charlist, charlist} |
+                    {:reconnect, list} |
                     {:get, Paddle.Filters.t, dn, atom} |
                     {:get_single, Paddle.Filters.t, dn, atom} |
                     {:add, dn, attributes, atom} |
                     {:delete, dn, atom} |
                     {:modify, dn, atom, [mod]}, GenServer.from, ldap_conn) ::
                     {:reply, term, ldap_conn}
+
+  @impl GenServer
+  def handle_call({:reconnect, opts}, _from, ldap_conn) do
+    unless ldap_conn == :not_connected do
+      :eldap.close(ldap_conn)
+    end
+
+    Logger.info("Reconnecting")
+
+    case do_connect(opts) do
+      {:ok, ldap_conn} -> {:reply, {:ok, :connected}, ldap_conn}
+      {:error, reason} -> {:reply, {:error, reason}, reason}
+    end
+  end
 
   @impl GenServer
   def handle_call(_message, _from, :not_connected) do
@@ -272,6 +287,23 @@ defmodule Paddle do
   def authenticate(username, password) do
     dn = Parsing.construct_dn([{config(:account_identifier), username}], config(:account_base))
     GenServer.call(Paddle, {:authenticate, dn, :binary.bin_to_list(password)})
+  end
+
+  @doc ~S"""
+  Closes the current connection and opens a new one.
+
+  Accepts connection information as arguments.
+  Not specified values will be fetched from the config.
+
+  Example:
+
+      iex> Paddle.reconnect(host: ['example.com'])
+      {:error, :not_connected}
+      iex> Paddle.reconnect()
+      {:ok, :connected}
+  """
+  def reconnect(opts \\ []) do
+    GenServer.call(Paddle, {:reconnect, opts})
   end
 
   @spec get_dn(Paddle.Class.t) :: {:ok, binary} | {:error, :missing_unique_identifier}
