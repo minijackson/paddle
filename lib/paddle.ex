@@ -129,49 +129,9 @@ defmodule Paddle do
 
   @impl GenServer
   def init(opts \\ []) do
-    ssl     = Keyword.get(opts, :ssl, config(:ssl))
-    ipv6    = Keyword.get(opts, :ipv6, config(:ipv6))
-    tcpopts = Keyword.get(opts, :tcpopts, config(:tcpopts))
-    sslopts = Keyword.get(opts, :sslopts, config(:sslopts))
-    host    = Keyword.get(opts, :host, config(:host))
-    port    = Keyword.get(opts, :port, config(:port))
-    timeout = Keyword.get(opts, :timeout, config(:timeout))
-
-    Logger.info("Connecting to ldap#{if ssl, do: "s"}://#{inspect host}:#{port}")
-
-    tcpopts = if ipv6 do
-      [:inet6 | tcpopts]
-    else
-      tcpopts
-    end
-
-    options = [ssl: ssl,
-               port: port,
-               tcpopts: tcpopts,
-               log: &eldap_log_callback/3]
-
-    options = if timeout do
-      Keyword.put(options, :timeout, timeout)
-    else
-      options
-    end
-
-    options = if ssl do
-      Keyword.put(options, :sslopts, sslopts)
-    else
-      options
-    end
-
-    Logger.debug("Effective :eldap options: #{inspect options}")
-
-    case :eldap.open(host, options) do
-      {:ok, ldap_conn} ->
-        :eldap.controlling_process(ldap_conn, self())
-        Logger.info("Connected to LDAP")
-        {:ok, ldap_conn}
-      {:error, _reason} ->
-        Logger.info("Failed to connect to LDAP")
-        {:ok, :not_connected}
+    case do_connect(opts) do
+      {:ok, ldap_conn} -> {:ok, ldap_conn}
+      {:error, reason} -> {:ok, reason}
     end
   end
 
@@ -689,4 +649,50 @@ defmodule Paddle do
     end
   end
 
+  defp do_connect(opts \\ []) do
+    ssl     = Keyword.get(opts, :ssl, config(:ssl))
+    ipv6    = Keyword.get(opts, :ipv6, config(:ipv6))
+    tcpopts = Keyword.get(opts, :tcpopts, config(:tcpopts))
+    sslopts = Keyword.get(opts, :sslopts, config(:sslopts))
+    host    = Keyword.get(opts, :host, config(:host))
+    port    = Keyword.get(opts, :port, config(:port))
+    timeout = Keyword.get(opts, :timeout, config(:timeout))
+
+    Logger.info("Connecting to ldap#{if ssl, do: "s"}://#{inspect host}:#{port}")
+
+    tcpopts = if ipv6 do
+      [:inet6 | tcpopts]
+    else
+      tcpopts
+    end
+
+    options = [ssl: ssl,
+               port: port,
+               tcpopts: tcpopts,
+               log: &eldap_log_callback/3]
+
+    options = if timeout do
+      Keyword.put(options, :timeout, timeout)
+    else
+      options
+    end
+
+    options = if ssl do
+      Keyword.put(options, :sslopts, sslopts)
+    else
+      options
+    end
+
+    Logger.debug("Effective :eldap options: #{inspect options}")
+
+    case :eldap.open(host, options) do
+      {:ok, ldap_conn} ->
+        :eldap.controlling_process(ldap_conn, self())
+        Logger.info("Connected to LDAP")
+        {:ok, ldap_conn}
+      {:error, _reason} ->
+        Logger.info("Failed to connect to LDAP")
+        {:error, :not_connected}
+    end
+  end
 end
