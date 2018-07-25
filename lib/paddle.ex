@@ -180,6 +180,12 @@ defmodule Paddle do
   @spec terminate(reason, ldap_conn) :: :ok
 
   @impl GenServer
+  def terminate(_reason, :not_connected) do
+    :ok
+    Logger.info("Stopped LDAP, state was not connected")
+  end
+
+  @impl GenServer
   def terminate(_reason, ldap_conn) do
     :eldap.close(ldap_conn)
     Logger.info("Stopped LDAP")
