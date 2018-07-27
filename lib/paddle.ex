@@ -131,7 +131,7 @@ defmodule Paddle do
   def init(opts \\ []) do
     case do_connect(opts) do
       {:ok, ldap_conn} -> {:ok, ldap_conn}
-      {:error, reason} -> {:ok, reason}
+      {:error, reason} -> {:ok, {:not_connected, reason}}
     end
   end
 
@@ -140,13 +140,13 @@ defmodule Paddle do
   @spec terminate(reason, ldap_conn) :: :ok
 
   @impl GenServer
-  def terminate(_reason, :not_connected) do
+  def terminate(_shutdown_reason, {:not_connected, _reason}) do
     :ok
     Logger.info("Stopped LDAP, state was not connected")
   end
 
   @impl GenServer
-  def terminate(_reason, ldap_conn) do
+  def terminate(_shutdown_reason, ldap_conn) do
     :eldap.close(ldap_conn)
     Logger.info("Stopped LDAP")
   end
@@ -162,21 +162,22 @@ defmodule Paddle do
 
   @impl GenServer
   def handle_call({:reconnect, opts}, _from, ldap_conn) do
-    unless ldap_conn == :not_connected do
-      :eldap.close(ldap_conn)
+    case ldap_conn do
+      {:not_connected, _reason} -> nil
+      pid -> :eldap.close(pid)
     end
 
     Logger.info("Reconnecting")
 
     case do_connect(opts) do
       {:ok, ldap_conn} -> {:reply, {:ok, :connected}, ldap_conn}
-      {:error, reason} -> {:reply, {:error, reason}, reason}
+      {:error, reason} -> {:reply, {:error, {:not_connected, reason}}, {:not_connected, reason}}
     end
   end
 
   @impl GenServer
-  def handle_call(_message, _from, :not_connected) do
-    {:reply, {:error, :not_connected}, :not_connected}
+  def handle_call(_message, _from, {:not_connected, _reason} = state) do
+    {:reply, {:error, state}, state}
   end
 
   @impl GenServer
@@ -298,7 +299,7 @@ defmodule Paddle do
   Example:
 
       iex> Paddle.reconnect(host: ['example.com'])
-      {:error, :not_connected}
+      {:error, {:not_connected, 'connect failed'}}
       iex> Paddle.reconnect()
       {:ok, :connected}
   """
@@ -722,9 +723,9 @@ defmodule Paddle do
         :eldap.controlling_process(ldap_conn, self())
         Logger.info("Connected to LDAP")
         {:ok, ldap_conn}
-      {:error, _reason} ->
+      {:error, reason} ->
         Logger.info("Failed to connect to LDAP")
-        {:error, :not_connected}
+        {:error, reason}
     end
   end
 end

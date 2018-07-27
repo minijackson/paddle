@@ -12,8 +12,8 @@ defmodule PaddleTest do
   test "when a connection cannot be open" do
     Paddle.reconnect(host: ['example.com'])
 
-    assert Paddle.authenticate([cn: "admin"], "password") == {:error, :not_connected}
-    assert Paddle.get(base: [uid: "testuser", ou: "People"]) == {:error, :not_connected}
+    assert Paddle.authenticate([cn: "admin"], "password") == {:error, {:not_connected, 'connect failed'}}
+    assert Paddle.get(base: [uid: "testuser", ou: "People"]) == {:error, {:not_connected, 'connect failed'}}
 
     Paddle.reconnect()
   end
