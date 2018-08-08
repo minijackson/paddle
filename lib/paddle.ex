@@ -177,7 +177,7 @@ defmodule Paddle do
 
   @impl GenServer
   def handle_call(_message, _from, {:not_connected, _reason} = state) do
-    {:reply, {:error, state}, state}
+    {:reply, {:error, :not_connected}, state}
   end
 
   @impl GenServer
