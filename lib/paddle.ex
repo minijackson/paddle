@@ -105,7 +105,7 @@ defmodule Paddle do
   alias Paddle.Filters
   alias Paddle.Attributes
 
-  @typep ldap_conn :: :eldap.handle
+  @typep ldap_conn :: :eldap.handle | {:not_connected, charlist}
   @type ldap_entry :: %{required(binary) => binary}
   @type auth_status :: :ok | {:error, atom}
 
