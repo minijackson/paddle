@@ -105,7 +105,7 @@ defmodule Paddle do
   alias Paddle.Filters
   alias Paddle.Attributes
 
-  @typep ldap_conn :: :eldap.handle | {:not_connected, charlist}
+  @typep ldap_conn :: :eldap.handle | {:not_connected, binary}
   @type ldap_entry :: %{required(binary) => binary}
   @type auth_status :: :ok | {:error, atom}
 
@@ -299,7 +299,7 @@ defmodule Paddle do
   Example:
 
       iex> Paddle.reconnect(host: ['example.com'])
-      {:error, {:not_connected, 'connect failed'}}
+      {:error, {:not_connected, "connect failed"}}
       iex> Paddle.reconnect()
       {:ok, :connected}
   """
@@ -725,7 +725,7 @@ defmodule Paddle do
         {:ok, ldap_conn}
       {:error, reason} ->
         Logger.info("Failed to connect to LDAP")
-        {:error, reason}
+        {:error, Kernel.to_string(reason)}
     end
   end
 end
