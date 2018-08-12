@@ -105,7 +105,7 @@ defmodule Paddle do
   alias Paddle.Filters
   alias Paddle.Attributes
 
-  @typep ldap_conn :: :eldap.handle
+  @typep ldap_conn :: :eldap.handle | {:not_connected, binary}
   @type ldap_entry :: %{required(binary) => binary}
   @type auth_status :: :ok | {:error, atom}
 
@@ -121,54 +121,18 @@ defmodule Paddle do
   @spec start_link(term) :: Genserver.on_start
 
   @doc false
-  def start_link(_args) do
-    GenServer.start_link(__MODULE__, :ok, name: __MODULE__)
+  def start_link(opts \\ []) do
+    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
-  @spec init(:ok) :: {:ok, ldap_conn}
+  @spec init([]) :: {:ok, ldap_conn}
 
   @impl GenServer
-  def init(:ok) do
-    ssl     = config(:ssl)
-    ipv6    = config(:ipv6)
-    tcpopts = config(:tcpopts)
-    sslopts = config(:sslopts)
-    host    = config(:host)
-    port    = config(:port)
-    timeout = config(:timeout)
-
-    Logger.info("Connecting to ldap#{if ssl, do: "s"}://#{inspect host}:#{port}")
-
-    tcpopts = if ipv6 do
-      [:inet6 | tcpopts]
-    else
-      tcpopts
+  def init(opts \\ []) do
+    case do_connect(opts) do
+      {:ok, ldap_conn} -> {:ok, ldap_conn}
+      {:error, reason} -> {:ok, {:not_connected, reason}}
     end
-
-    options = [ssl: ssl,
-               port: port,
-               tcpopts: tcpopts,
-               log: &eldap_log_callback/3]
-
-    options = if timeout do
-      Keyword.put(options, :timeout, timeout)
-    else
-      options
-    end
-
-    options = if ssl do
-      Keyword.put(options, :sslopts, sslopts)
-    else
-      options
-    end
-
-    Logger.debug("Effective :eldap options: #{inspect options}")
-
-    {:ok, ldap_conn} = :eldap.open(host, options)
-
-    :eldap.controlling_process(ldap_conn, self())
-    Logger.info("Connected to LDAP")
-    {:ok, ldap_conn}
   end
 
   @type reason :: :normal | :shutdown | {:shutdown, term} | term
@@ -176,18 +140,45 @@ defmodule Paddle do
   @spec terminate(reason, ldap_conn) :: :ok
 
   @impl GenServer
-  def terminate(_reason, ldap_conn) do
+  def terminate(_shutdown_reason, {:not_connected, _reason}) do
+    :ok
+    Logger.info("Stopped LDAP, state was not connected")
+  end
+
+  @impl GenServer
+  def terminate(_shutdown_reason, ldap_conn) do
     :eldap.close(ldap_conn)
     Logger.info("Stopped LDAP")
   end
 
   @spec handle_call({:authenticate, charlist, charlist} |
+                    {:reconnect, list} |
                     {:get, Paddle.Filters.t, dn, atom} |
                     {:get_single, Paddle.Filters.t, dn, atom} |
                     {:add, dn, attributes, atom} |
                     {:delete, dn, atom} |
                     {:modify, dn, atom, [mod]}, GenServer.from, ldap_conn) ::
                     {:reply, term, ldap_conn}
+
+  @impl GenServer
+  def handle_call({:reconnect, opts}, _from, ldap_conn) do
+    case ldap_conn do
+      {:not_connected, _reason} -> nil
+      pid -> :eldap.close(pid)
+    end
+
+    Logger.info("Reconnecting")
+
+    case do_connect(opts) do
+      {:ok, ldap_conn} -> {:reply, {:ok, :connected}, ldap_conn}
+      {:error, reason} -> {:reply, {:error, {:not_connected, reason}}, {:not_connected, reason}}
+    end
+  end
+
+  @impl GenServer
+  def handle_call(_message, _from, {:not_connected, _reason} = state) do
+    {:reply, {:error, :not_connected}, state}
+  end
 
   @impl GenServer
   def handle_call({:authenticate, dn, password}, _from, ldap_conn) do
@@ -297,6 +288,23 @@ defmodule Paddle do
   def authenticate(username, password) do
     dn = Parsing.construct_dn([{config(:account_identifier), username}], config(:account_base))
     GenServer.call(Paddle, {:authenticate, dn, :binary.bin_to_list(password)})
+  end
+
+  @doc ~S"""
+  Closes the current connection and opens a new one.
+
+  Accepts connection information as arguments.
+  Not specified values will be fetched from the config.
+
+  Example:
+
+      iex> Paddle.reconnect(host: ['example.com'])
+      {:error, {:not_connected, "connect failed"}}
+      iex> Paddle.reconnect()
+      {:ok, :connected}
+  """
+  def reconnect(opts \\ []) do
+    GenServer.call(Paddle, {:reconnect, opts})
   end
 
   @spec get_dn(Paddle.Class.t) :: {:ok, binary} | {:error, :missing_unique_identifier}
@@ -674,4 +682,50 @@ defmodule Paddle do
     end
   end
 
+  defp do_connect(opts \\ []) do
+    ssl     = Keyword.get(opts, :ssl, config(:ssl))
+    ipv6    = Keyword.get(opts, :ipv6, config(:ipv6))
+    tcpopts = Keyword.get(opts, :tcpopts, config(:tcpopts))
+    sslopts = Keyword.get(opts, :sslopts, config(:sslopts))
+    host    = Keyword.get(opts, :host, config(:host))
+    port    = Keyword.get(opts, :port, config(:port))
+    timeout = Keyword.get(opts, :timeout, config(:timeout))
+
+    Logger.info("Connecting to ldap#{if ssl, do: "s"}://#{inspect host}:#{port}")
+
+    tcpopts = if ipv6 do
+      [:inet6 | tcpopts]
+    else
+      tcpopts
+    end
+
+    options = [ssl: ssl,
+               port: port,
+               tcpopts: tcpopts,
+               log: &eldap_log_callback/3]
+
+    options = if timeout do
+      Keyword.put(options, :timeout, timeout)
+    else
+      options
+    end
+
+    options = if ssl do
+      Keyword.put(options, :sslopts, sslopts)
+    else
+      options
+    end
+
+    Logger.debug("Effective :eldap options: #{inspect options}")
+
+    case :eldap.open(host, options) do
+      {:ok, ldap_conn} ->
+        :eldap.controlling_process(ldap_conn, self())
+        Logger.info("Connected to LDAP")
+        {:ok, ldap_conn}
+      {:error, reason} ->
+        Logger.info("Failed to connect to LDAP")
+        {:error, Kernel.to_string(reason)}
+    end
+  end
 end
