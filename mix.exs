@@ -3,7 +3,7 @@ defmodule Paddle.Mixfile do
 
   def project do
     [app: :paddle,
-     version: "0.1.3",
+     version: "0.1.4",
      description: "A library simplifying LDAP usage",
      elixir: "~> 1.3",
      build_embedded: Mix.env == :prod,
@@ -34,10 +34,10 @@ defmodule Paddle.Mixfile do
   #
   # Type "mix help deps" for more examples and options
   defp deps do
-    [{:ex_doc, "~> 0.11", only: :dev},
-     {:dialyxir, "~> 0.5", only: [:dev, :test]},
-     {:credo, "~> 0.6", only: [:dev, :test]},
-     {:inch_ex, "~> 0.5", only: [:dev, :test]}]
+    [{:ex_doc, "~> 0.19", only: :dev, runtime: false},
+     {:dialyxir, "~> 0.5", only: [:dev, :test], runtime: false},
+     {:credo, "~> 0.6", only: [:dev, :test], runtime: false},
+     {:inch_ex, "~> 0.5", only: [:dev, :test], runtime: false}]
   end
 
   defp package() do
