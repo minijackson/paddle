@@ -37,7 +37,7 @@ iex> Paddle.authenticate("myUser", "password")
 :ok
 ```
 
-Get meaningful informations using [paddle class objects](https://hexdocs.pm/paddle/Paddle.Class.html):
+Get meaningful information using [Paddle.Class](https://hexdocs.pm/paddle/Paddle.Class.html) structs:
 
 ```elixir
 iex> Paddle.get %MyApp.PosixAccount{uid: "myUser"}
@@ -50,7 +50,7 @@ iex> Paddle.get %MyApp.PosixAccount{uid: "myUser"}
    userPassword: ["{SSHA}AIzygLSXlArhAMzddUriXQxf7UlkqopP"]}]}
 ```
 
-Or just get informations about anything:
+Or get information just about anything:
 
 ```elixir
 iex> Paddle.get base: [ou: "People"], filter: [objectClass: "organizationalUnit"]
@@ -68,31 +68,31 @@ The package can be installed as:
 
 1. Add `paddle` to your list of dependencies in `mix.exs`:
 
-  ```elixir
-  def deps do
-    [{:paddle, "~> 0.1.0"}]
-  end
-  ```
+    ```elixir
+    def deps do
+      [{:paddle, "~> 0.1.0"}]
+    end
+    ```
 
 2. Ensure `paddle` is started before your application:
 
-  ```elixir
-  def application do
-    [applications: [:paddle]]
-  end
-  ```
+    ```elixir
+    def application do
+      [applications: [:paddle]]
+    end
+    ```
 
 3. Add your configuration in your config files:
 
-  ```elixir
-  config :paddle, Paddle,
-    host: "ldap.my-organisation.org",
-    base: "dc=myorganisation,dc=org",
-    ssl: true,
-    port: 636
-  ```
+    ```elixir
+    config :paddle, Paddle,
+      host: "ldap.my-organisation.org",
+      base: "dc=myorganisation,dc=org",
+      ssl: true,
+      port: 636
+    ```
 
-  For more configurations, see the [`Paddle` module docmumentation](https://hexdocs.pm/paddle/Paddle.html#module-configuration).
+    For more configurations, see the [`Paddle` module docmumentation](https://hexdocs.pm/paddle/Paddle.html#module-configuration).
 
 ## Testing
 
