@@ -25,7 +25,8 @@ config :paddle, Paddle,
   host: "ldap.my-organisation.org",
   base: "dc=myorganisation,dc=org",
   ssl: true,
-  port: 636
+  port: 636,
+  filter_passwords: true
 
 # It is also possible to import configuration files, relative to this
 # directory. For example, you can emulate configuration per environment
