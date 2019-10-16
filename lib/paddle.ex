@@ -17,7 +17,8 @@ defmodule Paddle do
         sslopts: [certfile: '/path/to/certificate.crt'],
         timeout: 3000,
         account_subdn: "ou=People",
-        schema_files: Path.wildcard("/etc/openldap/schema/*.schema")
+        schema_files: Path.wildcard("/etc/openldap/schema/*.schema"),
+        filter_passwords: true
 
   Option    | Description | Default
   --------- | ----------- | -------
@@ -32,6 +33,7 @@ defmodule Paddle do
   `:account_subdn` | The DN (without the base) where the accounts are located. Used by the `Paddle.authenticate/2` function. | `"ou=People"`
   `:account_identifier` |  The identifier by which users are identified. Used by the `Paddle.authenticate/2` function. | `:uid`
   `:schema_files` | Files which are to be parsed to help generate classes using [`Paddle.Class.Helper`](Paddle.Class.Helper.html#module-using-schema-files).  | `[]`
+  `:filter_passwords` | Filter passwords from appearing in the logs | `true`
 
   ## Usage
 
@@ -676,7 +678,15 @@ defmodule Paddle do
 
   @doc false
   def eldap_log_callback(level, format_string, format_args) do
-    message = :io_lib.format(format_string, format_args)
+    message = case Application.get_env(:paddle, :filter_passwords, true) do
+      true -> 
+        :io_lib.format(format_string, format_args)
+        |> to_string()
+        |> String.replace(~r/{simple,".*"}/, ~s({simple,"filtered"}))
+      false ->
+        :io_lib.format(format_string, format_args)
+    end
+    
     case level do
       # Level 1 seems unused by :eldap
       1 -> Logger.info(message)
