@@ -390,6 +390,7 @@ defmodule Paddle do
                     :base})
   end
 
+  @spec get(Paddle.Class.t) :: {:ok, [Paddle.Class.t]} | {:error, search_ldap_error}
   @spec get(Paddle.Class.t, Paddle.Filters.t) :: {:ok, [Paddle.Class.t]} | {:error, search_ldap_error}
 
   @doc ~S"""
@@ -445,6 +446,7 @@ defmodule Paddle do
     result
   end
 
+  @spec get!(Paddle.Class.t) :: [Paddle.Class.t]
   @spec get!(Paddle.Class.t, Paddle.Filters.t) :: [Paddle.Class.t]
 
   @doc ~S"""
