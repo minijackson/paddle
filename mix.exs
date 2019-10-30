@@ -36,7 +36,7 @@ defmodule Paddle.Mixfile do
   defp deps do
     [{:ex_doc, "~> 0.19", only: :dev, runtime: false},
      {:dialyxir, "~> 0.5", only: [:dev, :test], runtime: false},
-     {:credo, "~> 0.6", only: [:dev, :test], runtime: false},
+     {:credo, "~> 1.1", only: [:dev, :test], runtime: false},
      {:inch_ex, "~> 0.5", only: [:dev, :test], runtime: false}]
   end
 
