@@ -19,6 +19,7 @@ defmodule Paddle do
         account_subdn: "ou=People",
         schema_files: Path.wildcard("/etc/openldap/schema/*.schema"),
         filter_passwords: true
+        retry_on_connection_closed: true
 
   Option    | Description | Default
   --------- | ----------- | -------
@@ -34,6 +35,7 @@ defmodule Paddle do
   `:account_identifier` |  The identifier by which users are identified. Used by the `Paddle.authenticate/2` function. | `:uid`
   `:schema_files` | Files which are to be parsed to help generate classes using [`Paddle.Class.Helper`](Paddle.Class.Helper.html#module-using-schema-files).  | `[]`
   `:filter_passwords` | Filter passwords from appearing in the logs | `true`
+  `:retry_on_connection_closed` | When set to `true`, retries to connect once to the LDAP server in case of closed connection to the server | `false`
 
   ## Usage
 
@@ -284,12 +286,12 @@ defmodule Paddle do
   """
   def authenticate(kwdn, password) when is_list(kwdn) do
     dn = Parsing.construct_dn(kwdn, config(:base))
-    GenServer.call(Paddle, {:authenticate, dn, :binary.bin_to_list(password)})
+    do_call_and_retry(Paddle, {:authenticate, dn, :binary.bin_to_list(password)})
   end
 
   def authenticate(username, password) do
     dn = Parsing.construct_dn([{config(:account_identifier), username}], config(:account_base))
-    GenServer.call(Paddle, {:authenticate, dn, :binary.bin_to_list(password)})
+    do_call_and_retry(Paddle, {:authenticate, dn, :binary.bin_to_list(password)})
   end
 
   @doc ~S"""
@@ -306,7 +308,7 @@ defmodule Paddle do
       {:ok, :connected}
   """
   def reconnect(opts \\ []) do
-    GenServer.call(Paddle, {:reconnect, opts})
+    do_call_and_retry(Paddle, {:reconnect, opts})
   end
 
   @spec get_dn(Paddle.Class.t) :: {:ok, binary} | {:error, :missing_unique_identifier}
@@ -385,11 +387,11 @@ defmodule Paddle do
          "userPassword" => ["{SSHA}AIzygLSXlArhAMzddUriXQxf7UlkqopP"]}]}
   """
   def get(kwdn) when is_list(kwdn) do
-    GenServer.call(Paddle,
-                   {:get,
-                    Keyword.get(kwdn, :filter),
-                    Keyword.get(kwdn, :base),
-                    :base})
+    do_call_and_retry(Paddle,
+                      {:get,
+                       Keyword.get(kwdn, :filter),
+                       Keyword.get(kwdn, :base),
+                       :base})
   end
 
   @spec get(Paddle.Class.t) :: {:ok, [Paddle.Class.t]} | {:error, search_ldap_error}
@@ -431,7 +433,8 @@ defmodule Paddle do
              |> Filters.merge_filter(fields_filter)
              |> Filters.merge_filter(additional_filter)
     location = Paddle.Class.location(object)
-    with {:ok, entries} <- GenServer.call(Paddle, {:get, filter, location, :base}) do
+
+    with {:ok, entries} <- do_call_and_retry(Paddle, {:get, filter, location, :base}) do
       {:ok,
        entries
        |> Enum.map(&Parsing.entry_to_class_object(&1, object))}
@@ -475,11 +478,11 @@ defmodule Paddle do
       {:error, :noSuchObject}
   """
   def get_single(kwdn) do
-    GenServer.call(Paddle,
-                   {:get_single,
-                    Keyword.get(kwdn, :filter),
-                    Keyword.get(kwdn, :base),
-                    :base})
+    do_call_and_retry(Paddle,
+                      {:get_single,
+                       Keyword.get(kwdn, :filter),
+                       Keyword.get(kwdn, :base),
+                       :base})
   end
 
   # ============
@@ -513,7 +516,7 @@ defmodule Paddle do
   this: `homeDirectory: ['/home/user']`
   """
   def add(kwdn, attributes), do:
-    GenServer.call(Paddle, {:add, kwdn, attributes, :base})
+    do_call_and_retry(Paddle, {:add, kwdn, attributes, :base})
 
   @spec add(Paddle.Class.t) :: :ok | {:error, :missing_unique_identifier} |
   {:error, :missing_req_attributes, [atom]} | {:error, add_ldap_error}
@@ -554,12 +557,12 @@ defmodule Paddle do
   `MyApp.PosixAccount` is configured appropriately).
   """
   def delete(kwdn) when is_list(kwdn) or is_binary(kwdn) do
-    GenServer.call(Paddle, {:delete, kwdn, :base})
+    do_call_and_retry(Paddle, {:delete, kwdn, :base})
   end
 
   def delete(class_object) when is_map(class_object) do
     with {:ok, dn} <- get_dn(class_object) do
-      GenServer.call(Paddle, {:delete, dn, :base})
+      do_call_and_retry(Paddle, {:delete, dn, :base})
     end
   end
 
@@ -611,12 +614,12 @@ defmodule Paddle do
 
   """
   def modify(kwdn, mods) when is_list(kwdn) or is_binary(kwdn) do
-    GenServer.call(Paddle, {:modify, kwdn, :base, mods})
+    do_call_and_retry(Paddle, {:modify, kwdn, :base, mods})
   end
 
   def modify(class_object, mods) when is_map(class_object) do
     with {:ok, dn} <- get_dn(class_object) do
-      GenServer.call(Paddle, {:modify, dn, :base, mods})
+      do_call_and_retry(Paddle, {:modify, dn, :base, mods})
     end
   end
 
@@ -643,17 +646,18 @@ defmodule Paddle do
       hosts when is_list(hosts) -> Enum.map(hosts, &String.to_charlist/1)
     end
   end
-  def config(:ssl),                do: config(:ssl, false)
-  def config(:ipv6),               do: config(:ipv6, false)
-  def config(:tcpopts),            do: config(:tcpopts, [])
-  def config(:sslopts),            do: config(:sslopts, [])
-  def config(:port),               do: config(:port, 389)
-  def config(:timeout),            do: config(:timeout, nil)
-  def config(:base),               do: config(:base, "")                   |> :binary.bin_to_list
-  def config(:account_base),       do: config(:account_subdn) ++ ',' ++ config(:base)
-  def config(:account_subdn),      do: config(:account_subdn, "ou=People") |> :binary.bin_to_list
-  def config(:account_identifier), do: config(:account_identifier, :uid)
-  def config(:schema_files),       do: config(:schema_files, [])
+  def config(:ssl),                  do: config(:ssl, false)
+  def config(:ipv6),                 do: config(:ipv6, false)
+  def config(:tcpopts),              do: config(:tcpopts, [])
+  def config(:sslopts),              do: config(:sslopts, [])
+  def config(:port),                 do: config(:port, 389)
+  def config(:timeout),              do: config(:timeout, nil)
+  def config(:base),                 do: config(:base, "")                   |> :binary.bin_to_list
+  def config(:account_base),         do: config(:account_subdn) ++ ',' ++ config(:base)
+  def config(:account_subdn),        do: config(:account_subdn, "ou=People") |> :binary.bin_to_list
+  def config(:account_identifier),   do: config(:account_identifier, :uid)
+  def config(:schema_files),         do: config(:schema_files, [])
+  def config(:retry_on_connection_closed), do: config(:retry_on_connection_closed, true)
 
   @spec config(atom, any) :: any
 
@@ -738,6 +742,41 @@ defmodule Paddle do
       {:error, reason} ->
         Logger.info("Failed to connect to LDAP")
         {:error, Kernel.to_string(reason)}
+    end
+  end
+
+  @spec do_call_and_retry(GenServer.server,
+          {:authenticate, charlist, charlist} |
+          {:reconnect, list} |
+          {:get, Paddle.Filters.t, dn, atom} |
+          {:get_single, Paddle.Filters.t, dn, atom} |
+          {:add, dn, attributes, atom} |
+          {:delete, dn, atom} |
+          {:modify, dn, atom, [mod]}) ::
+          term | {:error, {:not_connected, reason}}
+  defp do_call_and_retry(server, request) do
+    case {config(:retry_on_connection_closed), GenServer.call(server, request)} do
+      {true, {:error, :ldap_closed}} -> do_retry(server, request)
+      {true, {:gen_tcp_error, _}} -> do_retry(server, request)
+      {_, value} -> value
+    end
+  end
+
+  @spec do_retry(GenServer.server,
+          {:authenticate, charlist, charlist} |
+          {:reconnect, list} |
+          {:get, Paddle.Filters.t, dn, atom} |
+          {:get_single, Paddle.Filters.t, dn, atom} |
+          {:add, dn, attributes, atom} |
+          {:delete, dn, atom} |
+          {:modify, dn, atom, [mod]}) ::
+          term | {:error, {:not_connected, reason}}
+  defp do_retry(server, request) do
+    Logger.info("Reconnecting due to closed LDAP connection")
+
+    case GenServer.call(Paddle, {:reconnect, []}) do
+      {:error, {:not_connected, reason}} -> {:error, {:not_connected, reason}}
+      {:ok, :connected} -> GenServer.call(server, request)
     end
   end
 end
