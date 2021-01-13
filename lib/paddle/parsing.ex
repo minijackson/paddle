@@ -291,8 +291,12 @@ defmodule Paddle.Parsing do
       iex> Paddle.Parsing.list_wrap ["hello", "world"]
       ['hello', 'world']
   """
-  def list_wrap(list) when is_list(list), do: list |> Enum.map(&'#{&1}')
-  def list_wrap(thing), do: ['#{thing}']
+  def list_wrap(list) when is_list(list), do: list |> Enum.map(&:binary.bin_to_list(&1))
+
+  def list_wrap(thing) when is_integer(thing),
+    do: [thing |> Integer.to_string() |> :binary.bin_to_list()]
+
+  def list_wrap(thing), do: [:binary.bin_to_list(thing)]
 
   # =======================
   # == Private Utilities ==
