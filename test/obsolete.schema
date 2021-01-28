@@ -1,4 +1,0 @@
-objectclass ( 1.3.6.1.4.1.1466.344 NAME 'dcObject'
-	DESC 'RFC2247: domain component object'
-	OBSOLETE
-	SUP top AUXILIARY MUST dc )
