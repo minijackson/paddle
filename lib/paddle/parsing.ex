@@ -153,6 +153,10 @@ defmodule Paddle.Parsing do
     {:error, :noSuchObject}
   end
 
+  def clean_eldap_search_results({:ok, {:eldap_search_result, [], [], :asn1_NOVALUE}}, _base) do
+    {:error, :noSuchObject}
+  end
+
   def clean_eldap_search_results({:ok, {:eldap_search_result, entries, []}}, base) do
     {:ok, clean_entries(entries, base)}
   end
