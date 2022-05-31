@@ -179,8 +179,8 @@ unquote(Str) ->
 split({woid, _Line, Str}) ->
 	[list_to_binary(Str)];
 split({qdescrs, _Line, Str}) ->
-	lists:map(fun(Str) -> unquote(Str) end, string:tokens(Str, " \t\n()"));
+	lists:map(fun(Str0) -> unquote(Str0) end, string:tokens(Str, " \t\n()"));
 split({oids, _Line, Str}) ->
-	lists:map(fun(Str) -> list_to_binary(Str) end, string:tokens(Str, "$ \t\n()")).
+	lists:map(fun(Str0) -> list_to_binary(Str0) end, string:tokens(Str, "$ \t\n()")).
 
 kind({Kind, _Line}) -> Kind.

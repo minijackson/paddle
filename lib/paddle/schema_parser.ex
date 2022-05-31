@@ -11,23 +11,27 @@ defmodule Paddle.SchemaParser do
 
   @definitions Paddle.config(:schema_files)
                |> Enum.flat_map(fn file ->
-                 Logger.info "Loading #{file}"
-                 {:ok, lexed, _num} = file
-                                      |> File.read!
-                                      |> String.to_charlist
-                                      |> :schema_lexer.string
+                 Logger.info("Loading #{file}")
+
+                 {:ok, lexed, _num} =
+                   file
+                   |> File.read!()
+                   |> String.to_charlist()
+                   |> :schema_lexer.string()
+
                  {:ok, ast} = :schema_parser.parse(lexed)
                  ast
                end)
 
-  @object_definitions Enum.filter(@definitions,
-                                  fn {type, _attrs} -> type == :object_class end)
+  @object_definitions Enum.filter(
+                        @definitions,
+                        fn {type, _attrs} -> type == :object_class end
+                      )
 
-  @attribute_definitions Enum.filter_map(@definitions,
-                           fn {type, _attrs} -> type == :attribute_type end,
-                           fn {:attribute_type, attrs} -> Keyword.get(attrs, :name) end)
-                         ++ [["uid", "userid"]]
-
+  @attribute_definitions for(
+                           {:attribute_type, attrs} <- @definitions,
+                           do: Keyword.get(attrs, :name)
+                         ) ++ [["uid", "userid"]]
 
   @spec attributes(binary | [binary]) :: [atom]
 
@@ -49,7 +53,7 @@ defmodule Paddle.SchemaParser do
     |> Enum.flat_map(&attributes_from/1)
     |> Enum.map(&replace_alias/1)
     |> Enum.map(&String.to_atom/1)
-    |> Enum.uniq
+    |> Enum.uniq()
   end
 
   defp attributes_from({:object_class, description}) do
@@ -75,7 +79,7 @@ defmodule Paddle.SchemaParser do
     |> Enum.flat_map(&required_attributes_from/1)
     |> Enum.map(&replace_alias/1)
     |> Enum.map(&String.to_atom/1)
-    |> Enum.uniq
+    |> Enum.uniq()
   end
 
   defp required_attributes_from({:object_class, description}) do
@@ -97,26 +101,27 @@ defmodule Paddle.SchemaParser do
   end
 
   defp filter_definitions(definitions, object_classes) when is_list(object_classes) do
-    object_classes = object_classes
-                     |> Enum.map(fn class -> {class, :notfound} end)
-                     |> Enum.into(%{})
+    object_classes =
+      object_classes
+      |> Enum.map(fn class -> {class, :notfound} end)
+      |> Enum.into(%{})
 
     filter_definitions(definitions, object_classes, [])
   end
 
   defp filter_definitions([], object_classes, filtered) when is_map(object_classes) do
-    not_found = object_classes
-                |> Enum.filter_map(fn {_class, status} -> status == :notfound end,
-                                   fn {class, _status} -> class end)
+    not_found = for {class, :notfound} <- object_classes, do: class
 
     case not_found do
       [] -> filtered
-      _  -> raise "Missing object classe(s) definition(s): " <> Enum.join(not_found, ", ")
+      _ -> raise "Missing object classe(s) definition(s): " <> Enum.join(not_found, ", ")
     end
   end
 
-  defp filter_definitions([{:object_class, attrs} = class | rest], object_classes, filtered) when is_map(object_classes) do
+  defp filter_definitions([{:object_class, attrs} = class | rest], object_classes, filtered)
+       when is_map(object_classes) do
     name = attrs |> Keyword.get(:name) |> hd
+
     if Map.has_key?(object_classes, name) do
       if object_classes[name] == :notfound do
         filter_definitions(rest, Map.put(object_classes, name, :found), [class | filtered])
@@ -134,5 +139,4 @@ defmodule Paddle.SchemaParser do
       if field in aliases, do: hd(aliases)
     end) || field
   end
-
 end

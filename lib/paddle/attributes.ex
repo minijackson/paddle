@@ -3,7 +3,7 @@ defmodule Paddle.Attributes do
   Module used internally by Paddle to manipulate / convert LDAP attributes.
   """
 
-  @spec get(Paddle.Class.t) :: {:ok, map} | {:error, :missing_required_attributes, [atom]}
+  @spec get(Paddle.Class.t()) :: {:ok, map} | {:error, :missing_required_attributes, [atom]}
 
   @doc ~S"""
   Get the given and the generated attributes of a given class object.
@@ -22,12 +22,12 @@ defmodule Paddle.Attributes do
     given_attributes = Map.from_struct(class_object)
     generated_attributes = generate_defaults(class_object)
 
-    attributes = Map.merge(generated_attributes, given_attributes,
-                           &choose_value/3)
+    attributes = Map.merge(generated_attributes, given_attributes, &choose_value/3)
 
     required_attributes = Paddle.Class.required_attributes(class_object)
 
     missing_req_attributes = get_missing_req(attributes, required_attributes)
+
     case missing_req_attributes do
       [] -> {:ok, attributes}
       _ -> {:error, :missing_required_attributes, missing_req_attributes}
@@ -50,10 +50,9 @@ defmodule Paddle.Attributes do
 
   defp get_missing_req(attributes, required_attributes) do
     attributes
-    |> Enum.filter_map(fn {attribute, value} ->
+    |> Enum.filter(fn {attribute, value} ->
       attribute in required_attributes and value == nil
-    end,
-    fn {attribute, _value} -> attribute end)
+    end)
+    |> Enum.map(fn {attribute, _value} -> attribute end)
   end
-
 end
