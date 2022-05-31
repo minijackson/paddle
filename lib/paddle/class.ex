@@ -14,7 +14,7 @@ defprotocol Paddle.Class do
   `Paddle.PosixAccount` and `Paddle.PosixGroup`.
   """
 
-  @spec unique_identifier(Paddle.Class.t) :: atom
+  @spec unique_identifier(Paddle.Class.t()) :: atom
 
   @doc ~S"""
   Return the name of the attribute used in the DN to uniquely identify entries.
@@ -24,7 +24,7 @@ defprotocol Paddle.Class do
   """
   def unique_identifier(_)
 
-  @spec object_classes(Paddle.Class.t) :: binary | [binary]
+  @spec object_classes(Paddle.Class.t()) :: binary | [binary]
 
   @doc ~S"""
   Must return the class or the list of classes which this "object class"
@@ -37,7 +37,7 @@ defprotocol Paddle.Class do
   """
   def object_classes(_)
 
-  @spec required_attributes(Paddle.Class.t) :: [atom]
+  @spec required_attributes(Paddle.Class.t()) :: [atom]
 
   @doc ~S"""
   Return the list of required attributes for this "class"
@@ -49,7 +49,7 @@ defprotocol Paddle.Class do
   """
   def required_attributes(_)
 
-  @spec location(Paddle.Class.t) :: binary | keyword
+  @spec location(Paddle.Class.t()) :: binary | keyword
 
   @doc ~S"""
   Return the parent subDN (where to add / get entries of this type).
@@ -60,7 +60,7 @@ defprotocol Paddle.Class do
   """
   def location(_)
 
-  @spec generators(Paddle.Class.t) :: [{atom, ((Paddle.Class) -> term)}]
+  @spec generators(Paddle.Class.t()) :: [{atom, (Paddle.Class -> term)}]
 
   @doc ~S"""
   Return a list of attributes to be generated using the given functions.
@@ -80,7 +80,6 @@ defprotocol Paddle.Class do
       Paddle.PosixAccount.get_next_uid(%Paddle.PosixAccount{uid: "myUser", ...}
   """
   def generators(_)
-
 end
 
 defmodule Paddle.Class.Helper do
@@ -144,12 +143,12 @@ defmodule Paddle.Class.Helper do
   documentation](#module-manually-describing-the-class)).
   """
   defmacro gen_class(class_name, options) do
-    fields              = Keyword.get(options, :fields)
-    unique_identifier   = Keyword.get(options, :unique_identifier)
-    object_classes      = Keyword.get(options, :object_classes)
+    fields = Keyword.get(options, :fields)
+    unique_identifier = Keyword.get(options, :unique_identifier)
+    object_classes = Keyword.get(options, :object_classes)
     required_attributes = Keyword.get(options, :required_attributes)
-    location            = Keyword.get(options, :location)
-    generators          = Keyword.get(options, :generators, [])
+    location = Keyword.get(options, :location)
+    generators = Keyword.get(options, :generators, [])
 
     quote do
       defmodule unquote(class_name) do
@@ -157,11 +156,11 @@ defmodule Paddle.Class.Helper do
       end
 
       defimpl Paddle.Class, for: unquote(class_name) do
-        def unique_identifier(_),   do: unquote(unique_identifier)
-        def object_classes(_),      do: unquote(object_classes)
+        def unique_identifier(_), do: unquote(unique_identifier)
+        def object_classes(_), do: unquote(object_classes)
         def required_attributes(_), do: unquote(required_attributes)
-        def location(_),            do: unquote(location)
-        def generators(_),          do: unquote(generators)
+        def location(_), do: unquote(location)
+        def generators(_), do: unquote(generators)
       end
     end
   end
@@ -176,16 +175,22 @@ defmodule Paddle.Class.Helper do
   `Paddle.Class.unique_identifier/1`), and some optional generators (see
   `Paddle.Class.generators/1`)
   """
-  defmacro gen_class_from_schema(class_name, object_classes, location, unique_identifier \\ nil, generators \\ []) do
-    {class_name,        _bindings} = Code.eval_quoted(class_name,        [], __CALLER__)
-    {object_classes,    _bindings} = Code.eval_quoted(object_classes,    [], __CALLER__)
-    {location,          _bindings} = Code.eval_quoted(location,          [], __CALLER__)
+  defmacro gen_class_from_schema(
+             class_name,
+             object_classes,
+             location,
+             unique_identifier \\ nil,
+             generators \\ []
+           ) do
+    {class_name, _bindings} = Code.eval_quoted(class_name, [], __CALLER__)
+    {object_classes, _bindings} = Code.eval_quoted(object_classes, [], __CALLER__)
+    {location, _bindings} = Code.eval_quoted(location, [], __CALLER__)
     {unique_identifier, _bindings} = Code.eval_quoted(unique_identifier, [], __CALLER__)
-    {generators,        _bindings} = Code.eval_quoted(generators,        [], __CALLER__)
+    {generators, _bindings} = Code.eval_quoted(generators, [], __CALLER__)
 
-    fields              = Paddle.SchemaParser.attributes(object_classes)
+    fields = Paddle.SchemaParser.attributes(object_classes)
     required_attributes = Paddle.SchemaParser.required_attributes(object_classes)
-    unique_identifier   = unique_identifier || hd(required_attributes)
+    unique_identifier = unique_identifier || hd(required_attributes)
 
     quote do
       defmodule unquote(class_name) do
@@ -193,13 +198,12 @@ defmodule Paddle.Class.Helper do
       end
 
       defimpl Paddle.Class, for: unquote(class_name) do
-        def unique_identifier(_),   do: unquote(unique_identifier)
-        def object_classes(_),      do: unquote(object_classes)
+        def unique_identifier(_), do: unquote(unique_identifier)
+        def object_classes(_), do: unquote(object_classes)
         def required_attributes(_), do: unquote(required_attributes)
-        def location(_),            do: unquote(location)
-        def generators(_),          do: unquote(generators)
+        def location(_), do: unquote(location)
+        def generators(_), do: unquote(generators)
       end
     end
   end
-
 end

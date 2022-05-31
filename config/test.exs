@@ -1,4 +1,4 @@
-use Mix.Config
+import Config
 
 config :paddle, Paddle,
   schema_files: Path.wildcard("/etc/ldap/schema/*.schema"),

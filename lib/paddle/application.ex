@@ -5,8 +5,8 @@ defmodule Paddle.Application do
 
   def start(_type, _args) do
     Supervisor.start_link([Paddle],
-                          strategy: :one_for_one,
-                          name: Paddle.Supervisor)
+      strategy: :one_for_one,
+      name: Paddle.Supervisor
+    )
   end
-
 end

@@ -107,7 +107,7 @@ defmodule Paddle do
   alias Paddle.Filters
   alias Paddle.Attributes
 
-  @typep ldap_conn :: :eldap.handle | {:not_connected, binary}
+  @typep ldap_conn :: :eldap.handle() | {:not_connected, binary}
   @type ldap_entry :: %{required(binary) => binary}
   @type auth_status :: :ok | {:error, atom}
 
@@ -120,7 +120,7 @@ defmodule Paddle do
     """
   end
 
-  @spec start_link(term) :: Genserver.on_start
+  @spec start_link(term) :: Genserver.on_start()
 
   @doc false
   def start_link(opts \\ []) do
@@ -153,14 +153,18 @@ defmodule Paddle do
     Logger.info("Stopped LDAP")
   end
 
-  @spec handle_call({:authenticate, charlist, charlist} |
-                    {:reconnect, list} |
-                    {:get, Paddle.Filters.t, dn, atom} |
-                    {:get_single, Paddle.Filters.t, dn, atom} |
-                    {:add, dn, attributes, atom} |
-                    {:delete, dn, atom} |
-                    {:modify, dn, atom, [mod]}, GenServer.from, ldap_conn) ::
-                    {:reply, term, ldap_conn}
+  @spec handle_call(
+          {:authenticate, charlist, charlist}
+          | {:reconnect, list}
+          | {:get, Paddle.Filters.t(), dn, atom}
+          | {:get_single, Paddle.Filters.t(), dn, atom}
+          | {:add, dn, attributes, atom}
+          | {:delete, dn, atom}
+          | {:modify, dn, atom, [mod]},
+          GenServer.from(),
+          ldap_conn
+        ) ::
+          {:reply, term, ldap_conn}
 
   @impl GenServer
   def handle_call({:reconnect, opts}, _from, ldap_conn) do
@@ -184,7 +188,7 @@ defmodule Paddle do
 
   @impl GenServer
   def handle_call({:authenticate, dn, password}, _from, ldap_conn) do
-    Logger.debug "Authenticating with dn: #{dn}"
+    Logger.debug("Authenticating with dn: #{dn}")
     status = :eldap.simple_bind(ldap_conn, dn, password)
 
     case status do
@@ -196,33 +200,34 @@ defmodule Paddle do
   @impl GenServer
   def handle_call({:get, filter, kwdn, base}, _from, ldap_conn) do
     base = config(base)
-    dn     = Parsing.construct_dn(kwdn, base)
+    dn = Parsing.construct_dn(kwdn, base)
     filter = Filters.construct_filter(filter)
 
-    Logger.debug("Getting entries with dn: #{dn} and filter: #{inspect filter, pretty: true}")
+    Logger.debug("Getting entries with dn: #{dn} and filter: #{inspect(filter, pretty: true)}")
 
     {:reply,
      :eldap.search(ldap_conn, base: dn, filter: filter)
-     |> Parsing.clean_eldap_search_results(base),
-     ldap_conn}
+     |> Parsing.clean_eldap_search_results(base), ldap_conn}
   end
 
   @impl GenServer
   def handle_call({:get_single, filter, kwdn, base}, _from, ldap_conn) do
     base = config(base)
-    dn     = Parsing.construct_dn(kwdn, base)
+    dn = Parsing.construct_dn(kwdn, base)
     filter = Filters.construct_filter(filter)
 
-    Logger.debug("Getting single entry with dn: #{dn} and filter: #{inspect filter, pretty: true}")
+    Logger.debug(
+      "Getting single entry with dn: #{dn} and filter: #{inspect(filter, pretty: true)}"
+    )
 
     {:reply,
      :eldap.search(ldap_conn,
-                   base: dn,
-                   scope: :eldap.baseObject,
-                   filter: filter)
-      |> Parsing.clean_eldap_search_results(base)
-      |> ensure_single_result,
-     ldap_conn}
+       base: dn,
+       scope: :eldap.baseObject(),
+       filter: filter
+     )
+     |> Parsing.clean_eldap_search_results(base)
+     |> ensure_single_result, ldap_conn}
   end
 
   @impl GenServer
@@ -231,9 +236,10 @@ defmodule Paddle do
 
     Logger.info("Adding entry with dn: #{dn}")
 
-    attributes = attributes
-                 |> Enum.filter_map(fn {_key, value} -> value != nil end,
-                                    fn {key, value} -> {'#{key}', Parsing.list_wrap value} end)
+    attributes =
+      attributes
+      |> Enum.filter(fn {_key, value} -> value != nil end)
+      |> Enum.map(fn {key, value} -> {'#{key}', Parsing.list_wrap(value)} end)
 
     {:reply, :eldap.add(ldap_conn, dn, attributes), ldap_conn}
   end
@@ -251,17 +257,24 @@ defmodule Paddle do
   def handle_call({:modify, kwdn, base, mods}, _from, ldap_conn) do
     dn = Parsing.construct_dn(kwdn, config(base))
 
-    Logger.info("Modifying entry: \"#{dn}\" with mods: #{inspect mods}")
+    Logger.info("Modifying entry: \"#{dn}\" with mods: #{inspect(mods)}")
 
     mods = mods |> Enum.map(&Parsing.mod_convert/1)
 
     {:reply, :eldap.modify(ldap_conn, dn, mods), ldap_conn}
   end
 
-  @type authenticate_ldap_error :: :operationsError | :protocolError |
-  :authMethodNotSupported | :strongAuthRequired | :referral |
-  :saslBindInProgress | :inappropriateAuthentication | :invalidCredentials |
-  :unavailable | :anonymous_auth
+  @type authenticate_ldap_error ::
+          :operationsError
+          | :protocolError
+          | :authMethodNotSupported
+          | :strongAuthRequired
+          | :referral
+          | :saslBindInProgress
+          | :inappropriateAuthentication
+          | :invalidCredentials
+          | :unavailable
+          | :anonymous_auth
   @spec authenticate(dn, binary) :: :ok | {:error, authenticate_ldap_error}
 
   @doc ~S"""
@@ -309,7 +322,7 @@ defmodule Paddle do
     GenServer.call(Paddle, {:reconnect, opts})
   end
 
-  @spec get_dn(Paddle.Class.t) :: {:ok, binary} | {:error, :missing_unique_identifier}
+  @spec get_dn(Paddle.Class.t()) :: {:ok, binary} | {:error, :missing_unique_identifier}
 
   @doc ~S"""
   Get the DN of an entry.
@@ -326,7 +339,7 @@ defmodule Paddle do
     id_value = Map.get(object, id_field)
 
     if id_value do
-      id_value = Paddle.Parsing.ldap_escape id_value
+      id_value = Paddle.Parsing.ldap_escape(id_value)
 
       {:ok, "#{id_field}=#{id_value},#{subdn}"}
     else
@@ -338,8 +351,12 @@ defmodule Paddle do
   # == Getting ==
   # =============
 
-  @type search_ldap_error :: :noSuchObject | :sizeLimitExceeded |
-  :timeLimitExceeded | :undefinedAttributeType | :insufficientAccessRights
+  @type search_ldap_error ::
+          :noSuchObject
+          | :sizeLimitExceeded
+          | :timeLimitExceeded
+          | :undefinedAttributeType
+          | :insufficientAccessRights
 
   @spec get(dn) :: {:ok, [ldap_entry]} | {:error, search_ldap_error}
 
@@ -385,15 +402,15 @@ defmodule Paddle do
          "userPassword" => ["{SSHA}AIzygLSXlArhAMzddUriXQxf7UlkqopP"]}]}
   """
   def get(kwdn) when is_list(kwdn) do
-    GenServer.call(Paddle,
-                   {:get,
-                    Keyword.get(kwdn, :filter),
-                    Keyword.get(kwdn, :base),
-                    :base})
+    GenServer.call(
+      Paddle,
+      {:get, Keyword.get(kwdn, :filter), Keyword.get(kwdn, :base), :base}
+    )
   end
 
-  @spec get(Paddle.Class.t) :: {:ok, [Paddle.Class.t]} | {:error, search_ldap_error}
-  @spec get(Paddle.Class.t, Paddle.Filters.t) :: {:ok, [Paddle.Class.t]} | {:error, search_ldap_error}
+  @spec get(Paddle.Class.t()) :: {:ok, [Paddle.Class.t()]} | {:error, search_ldap_error}
+  @spec get(Paddle.Class.t(), Paddle.Filters.t()) ::
+          {:ok, [Paddle.Class.t()]} | {:error, search_ldap_error}
 
   @doc ~S"""
   Get an entry in the LDAP given a class object. You can specify an optional
@@ -422,15 +439,20 @@ defmodule Paddle do
          memberUid: nil, userPassword: nil}]}
   """
   def get(object, additional_filter \\ nil) when is_map(object) do
-    fields_filter = object
-                    |> Map.from_struct
-                    |> Enum.filter(fn {_key, value} -> value != nil end)
-    filter = object
-             |> Paddle.Class.object_classes
-             |> Filters.class_filter
-             |> Filters.merge_filter(fields_filter)
-             |> Filters.merge_filter(additional_filter)
+    fields_filter =
+      object
+      |> Map.from_struct()
+      |> Enum.filter(fn {_key, value} -> value != nil end)
+
+    filter =
+      object
+      |> Paddle.Class.object_classes()
+      |> Filters.class_filter()
+      |> Filters.merge_filter(fields_filter)
+      |> Filters.merge_filter(additional_filter)
+
     location = Paddle.Class.location(object)
+
     with {:ok, entries} <- GenServer.call(Paddle, {:get, filter, location, :base}) do
       {:ok,
        entries
@@ -448,8 +470,8 @@ defmodule Paddle do
     result
   end
 
-  @spec get!(Paddle.Class.t) :: [Paddle.Class.t]
-  @spec get!(Paddle.Class.t, Paddle.Filters.t) :: [Paddle.Class.t]
+  @spec get!(Paddle.Class.t()) :: [Paddle.Class.t()]
+  @spec get!(Paddle.Class.t(), Paddle.Filters.t()) :: [Paddle.Class.t()]
 
   @doc ~S"""
   Same as `get/2` but throws in case of an error.
@@ -475,11 +497,10 @@ defmodule Paddle do
       {:error, :noSuchObject}
   """
   def get_single(kwdn) do
-    GenServer.call(Paddle,
-                   {:get_single,
-                    Keyword.get(kwdn, :filter),
-                    Keyword.get(kwdn, :base),
-                    :base})
+    GenServer.call(
+      Paddle,
+      {:get_single, Keyword.get(kwdn, :filter), Keyword.get(kwdn, :base), :base}
+    )
   end
 
   # ============
@@ -487,9 +508,13 @@ defmodule Paddle do
   # ============
 
   @type attributes :: keyword | %{required(binary) => binary} | [{binary, binary}]
-  @type add_ldap_error :: :undefinedAttributeType | :objectClassViolation |
-  :invalidAttributeSyntax | :noSuchObject | :insufficientAccessRights |
-  :entryAlreadyExists
+  @type add_ldap_error ::
+          :undefinedAttributeType
+          | :objectClassViolation
+          | :invalidAttributeSyntax
+          | :noSuchObject
+          | :insufficientAccessRights
+          | :entryAlreadyExists
 
   @spec add(dn, attributes) :: :ok | {:error, add_ldap_error}
 
@@ -512,11 +537,13 @@ defmodule Paddle do
   a char list as an attribute value. But, you can wrap it in an array like
   this: `homeDirectory: ['/home/user']`
   """
-  def add(kwdn, attributes), do:
-    GenServer.call(Paddle, {:add, kwdn, attributes, :base})
+  def add(kwdn, attributes), do: GenServer.call(Paddle, {:add, kwdn, attributes, :base})
 
-  @spec add(Paddle.Class.t) :: :ok | {:error, :missing_unique_identifier} |
-  {:error, :missing_req_attributes, [atom]} | {:error, add_ldap_error}
+  @spec add(Paddle.Class.t()) ::
+          :ok
+          | {:error, :missing_unique_identifier}
+          | {:error, :missing_req_attributes, [atom]}
+          | {:error, add_ldap_error}
 
   @doc ~S"""
   Add an entry to the LDAP given a class object.
@@ -536,10 +563,9 @@ defmodule Paddle do
   # == Deleting ==
   # ==============
 
-  @type delete_ldap_error :: :noSuchObject | :notAllowedOnNonLeaf |
-  :insufficientAccessRights
+  @type delete_ldap_error :: :noSuchObject | :notAllowedOnNonLeaf | :insufficientAccessRights
 
-  @spec delete(Paddle.Class.t | dn) :: :ok | {:error, delete_ldap_error}
+  @spec delete(Paddle.Class.t() | dn) :: :ok | {:error, delete_ldap_error}
 
   @doc ~S"""
   Delete a LDAP entry given a DN or a class object.
@@ -567,15 +593,23 @@ defmodule Paddle do
   # == Modifying ==
   # ===============
 
-  @type mod :: {:add, {binary | atom, binary | [binary]}} | {:delete, binary} |
-  {:replace, {binary | atom, binary | [binary]}}
+  @type mod ::
+          {:add, {binary | atom, binary | [binary]}}
+          | {:delete, binary}
+          | {:replace, {binary | atom, binary | [binary]}}
 
-  @type modify_ldap_error :: :noSuchObject | :undefinedAttributeType |
-  :namingViolation | :attributeOrValueExists | :invalidAttributeSyntax |
-  :notAllowedOnRDN | :objectClassViolation | :objectClassModsProhibited |
-  :insufficientAccessRights
+  @type modify_ldap_error ::
+          :noSuchObject
+          | :undefinedAttributeType
+          | :namingViolation
+          | :attributeOrValueExists
+          | :invalidAttributeSyntax
+          | :notAllowedOnRDN
+          | :objectClassViolation
+          | :objectClassModsProhibited
+          | :insufficientAccessRights
 
-  @spec modify(Paddle.Class.t | dn, [mod]) :: :ok | {:error, modify_ldap_error}
+  @spec modify(Paddle.Class.t() | dn, [mod]) :: :ok | {:error, modify_ldap_error}
 
   @doc ~S"""
   Modify an LDAP entry given a DN or a class object and a list of
@@ -643,17 +677,18 @@ defmodule Paddle do
       hosts when is_list(hosts) -> Enum.map(hosts, &String.to_charlist/1)
     end
   end
-  def config(:ssl),                do: config(:ssl, false)
-  def config(:ipv6),               do: config(:ipv6, false)
-  def config(:tcpopts),            do: config(:tcpopts, [])
-  def config(:sslopts),            do: config(:sslopts, [])
-  def config(:port),               do: config(:port, 389)
-  def config(:timeout),            do: config(:timeout, nil)
-  def config(:base),               do: config(:base, "")                   |> :binary.bin_to_list
-  def config(:account_base),       do: config(:account_subdn) ++ ',' ++ config(:base)
-  def config(:account_subdn),      do: config(:account_subdn, "ou=People") |> :binary.bin_to_list
+
+  def config(:ssl), do: config(:ssl, false)
+  def config(:ipv6), do: config(:ipv6, false)
+  def config(:tcpopts), do: config(:tcpopts, [])
+  def config(:sslopts), do: config(:sslopts, [])
+  def config(:port), do: config(:port, 389)
+  def config(:timeout), do: config(:timeout, nil)
+  def config(:base), do: config(:base, "") |> :binary.bin_to_list()
+  def config(:account_base), do: config(:account_subdn) ++ ',' ++ config(:base)
+  def config(:account_subdn), do: config(:account_subdn, "ou=People") |> :binary.bin_to_list()
   def config(:account_identifier), do: config(:account_identifier, :uid)
-  def config(:schema_files),       do: config(:schema_files, [])
+  def config(:schema_files), do: config(:schema_files, [])
 
   @spec config(atom, any) :: any
 
@@ -662,8 +697,8 @@ defmodule Paddle do
   """
   def config(key, default), do: Keyword.get(config(), key, default)
 
-  @spec ensure_single_result({:ok, [ldap_entry]} | {:error, atom})
-  :: {:ok, ldap_entry} | {:error, :noSuchObject}
+  @spec ensure_single_result({:ok, [ldap_entry]} | {:error, atom}) ::
+          {:ok, ldap_entry} | {:error, :noSuchObject}
 
   defp ensure_single_result({:error, error}) do
     case error do
@@ -678,15 +713,17 @@ defmodule Paddle do
 
   @doc false
   def eldap_log_callback(level, format_string, format_args) do
-    message = case Application.get_env(:paddle, :filter_passwords, true) do
-      true -> 
-        :io_lib.format(format_string, format_args)
-        |> to_string()
-        |> String.replace(~r/{simple,".*"}/, ~s({simple,"filtered"}))
-      false ->
-        :io_lib.format(format_string, format_args)
-    end
-    
+    message =
+      case Application.get_env(:paddle, :filter_passwords, true) do
+        true ->
+          :io_lib.format(format_string, format_args)
+          |> to_string()
+          |> String.replace(~r/{simple,".*"}/, ~s({simple,"filtered"}))
+
+        false ->
+          :io_lib.format(format_string, format_args)
+      end
+
     case level do
       # Level 1 seems unused by :eldap
       1 -> Logger.info(message)
@@ -694,47 +731,48 @@ defmodule Paddle do
     end
   end
 
-  defp do_connect(opts \\ []) do
-    ssl     = Keyword.get(opts, :ssl, config(:ssl))
-    ipv6    = Keyword.get(opts, :ipv6, config(:ipv6))
+  defp do_connect(opts) do
+    ssl = Keyword.get(opts, :ssl, config(:ssl))
+    ipv6 = Keyword.get(opts, :ipv6, config(:ipv6))
     tcpopts = Keyword.get(opts, :tcpopts, config(:tcpopts))
     sslopts = Keyword.get(opts, :sslopts, config(:sslopts))
-    host    = Keyword.get(opts, :host, config(:host))
-    port    = Keyword.get(opts, :port, config(:port))
+    host = Keyword.get(opts, :host, config(:host))
+    port = Keyword.get(opts, :port, config(:port))
     timeout = Keyword.get(opts, :timeout, config(:timeout))
 
-    Logger.info("Connecting to ldap#{if ssl, do: "s"}://#{inspect host}:#{port}")
+    Logger.info("Connecting to ldap#{if ssl, do: "s"}://#{inspect(host)}:#{port}")
 
-    tcpopts = if ipv6 do
-      [:inet6 | tcpopts]
-    else
-      tcpopts
-    end
+    tcpopts =
+      if ipv6 do
+        [:inet6 | tcpopts]
+      else
+        tcpopts
+      end
 
-    options = [ssl: ssl,
-               port: port,
-               tcpopts: tcpopts,
-               log: &eldap_log_callback/3]
+    options = [ssl: ssl, port: port, tcpopts: tcpopts, log: &eldap_log_callback/3]
 
-    options = if timeout do
-      Keyword.put(options, :timeout, timeout)
-    else
-      options
-    end
+    options =
+      if timeout do
+        Keyword.put(options, :timeout, timeout)
+      else
+        options
+      end
 
-    options = if ssl do
-      Keyword.put(options, :sslopts, sslopts)
-    else
-      options
-    end
+    options =
+      if ssl do
+        Keyword.put(options, :sslopts, sslopts)
+      else
+        options
+      end
 
-    Logger.debug("Effective :eldap options: #{inspect options}")
+    Logger.debug("Effective :eldap options: #{inspect(options)}")
 
     case :eldap.open(host, options) do
       {:ok, ldap_conn} ->
         :eldap.controlling_process(ldap_conn, self())
         Logger.info("Connected to LDAP")
         {:ok, ldap_conn}
+
       {:error, reason} ->
         Logger.info("Failed to connect to LDAP")
         {:error, Kernel.to_string(reason)}

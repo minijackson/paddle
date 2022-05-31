@@ -45,17 +45,21 @@ defmodule Paddle.Filters do
   def construct_filter(filter) when is_tuple(filter), do: filter
   def construct_filter(nil), do: :eldap.and([])
 
-  def construct_filter(filter) when is_map(filter), do: filter
-                                                        |> Enum.into([])
-                                                        |> construct_filter
+  def construct_filter(filter) when is_map(filter) do
+    filter
+    |> Enum.into([])
+    |> construct_filter()
+  end
 
   def construct_filter([{key, value}]) when is_binary(value) do
     :eldap.equalityMatch('#{key}', '#{value}')
   end
 
   def construct_filter(kwdn) when is_list(kwdn) do
-    criteria = kwdn
-               |> Enum.map(fn {key, value} -> :eldap.equalityMatch('#{key}', '#{value}') end)
+    criteria =
+      kwdn
+      |> Enum.map(fn {key, value} -> :eldap.equalityMatch('#{key}', '#{value}') end)
+
     :eldap.and(criteria)
   end
 
@@ -119,9 +123,8 @@ defmodule Paddle.Filters do
   def class_filter(classes) when is_list(classes) do
     classes
     |> Enum.map(&:eldap.equalityMatch('objectClass', '#{&1}'))
-    |> :eldap.and
+    |> :eldap.and()
   end
 
   def class_filter(class), do: :eldap.equalityMatch('objectClass', '#{class}')
-
 end
