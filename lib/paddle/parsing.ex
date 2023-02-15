@@ -228,7 +228,11 @@ defmodule Paddle.Parsing do
   defp strip_base_from_dn(dn, 0) when is_binary(dn), do: dn
   defp strip_base_from_dn(dn, base_length) when is_binary(dn) do
     dn_length = String.length(dn)
-    String.slice(dn, 0, dn_length - base_length - 1)
+    slice_length = case dn_length - base_length do
+      0 -> 0
+      _ -> dn_length - base_length - 1
+    end
+    String.slice(dn, 0, slice_length)
   end
 
   # ===================
