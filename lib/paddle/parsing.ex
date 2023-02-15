@@ -157,6 +157,10 @@ defmodule Paddle.Parsing do
     {:ok, clean_entries(entries, base)}
   end
 
+  def clean_eldap_search_results({:ok, {:eldap_search_result, entries, [], :asn1_NOVALUE}}, base) do
+    {:ok, clean_entries(entries, base)}
+  end
+
   @spec entry_to_class_object(Paddle.ldap_entry, Paddle.Class.t) :: Paddle.Class.t
 
   @doc ~S"""
